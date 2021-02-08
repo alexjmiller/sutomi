@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="350px" height="350px" viewBox="0 0 350 350" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+    <!-- Generator: Sketch 3.0.2 (7799) - http://www.bohemiancoding.com/sketch -->
+    <title>6_white_roundrect</title>
+    <description>Created with Sketch.</description>
+    <defs></defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" sketch:type="MSPage">
+        <g id="roundrect-white" sketch:type="MSLayerGroup">
+            <rect id="Rectangle-7" fill="#333333" sketch:type="MSShapeGroup" x="1" y="0" width="350" height="350" rx="20"></rect>
+            <path d="M296.620351,54.9179516 L296.620351,102.425262 C280.687726,102.27865 277.778345,102.56275 266.209792,102.425262 C251.28197,102.247818 242.636906,109.75586 242.724375,126.378071 C242.724375,136.263996 242.62123,151.38422 242.696473,161.573437 L294.739286,161.573437 C292.544709,179.190155 290.350133,196.80876 288.155557,214.429253 L242.696473,214.429253 L242.696473,350.02959 L188.459084,350.02959 L188.459084,214.429253 L143,214.429253 L143,161.573437 C158.151669,161.573437 173.307728,161.573437 188.462846,160.721137 C188.539029,121.978453 188.202945,107.169701 190.340149,102.425262 C197.10885,73.7006433 218.074266,54.9371433 249.907224,53.0302439 C256.385927,52.9254761 262.552687,53.1350116 269.03139,53.0302439 L296.620351,54.9179516 Z" id="Color_Fill_1-2" fill="#FFFFFF" sketch:type="MSShapeGroup"></path>
+        </g>
+    </g>
+</svg>
