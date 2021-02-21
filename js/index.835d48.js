@@ -9,5 +9,6 @@ r=function(){if(thresholdPassed()){dpi=window.devicePixelRatio;if($(window).widt
 if(!window.HTMLPictureElement){$(window).resize(r);r();}
 (function(){$('a[href^="#"]:not(.allowConsent,.noConsent,.denyConsent,.removeConsent)').each(function(i,e){$(e).click(function(){var t=e.hash.length>1?$('[name="'+e.hash.slice(1)+'"]').offset().top:0;return $("html, body").animate({scrollTop:t},400),!1})})})();
 initMenu($('#m1')[0]);
+$('.c1').Stickyfill();
 
 });
