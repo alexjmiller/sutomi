@@ -1,0 +1,30 @@
+services:
+  sutomi:
+    build: .
+    image: sutomi:latest
+    container_name: sutomi
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - SUTOMI_PASSWORD=${SUTOMI_PASSWORD:?set SUTOMI_PASSWORD in .env}
+    volumes:
+      - sutomi-data:/app/data
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sutomi.rule=Host(`sutomi.net`) || Host(`www.sutomi.net`)"
+      - "traefik.http.routers.sutomi.entrypoints=websecure"
+      - "traefik.http.routers.sutomi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sutomi.loadbalancer.server.port=3000"
+      - "traefik.http.routers.sutomi.middlewares=sutomi-www"
+      - "traefik.http.middlewares.sutomi-www.redirectregex.regex=^https?://www\\.sutomi\\.net/(.*)"
+      - "traefik.http.middlewares.sutomi-www.redirectregex.replacement=https://sutomi.net/$${1}"
+      - "traefik.http.middlewares.sutomi-www.redirectregex.permanent=true"
+
+volumes:
+  sutomi-data:
+
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "art1",
+    "title": "Building websites",
+    "body": "I absolutely love building websites, however I'm not great at marketing them yet. you might have noticed that there is no cookies notice or any other popups. I hate them with a vengeance, so much so that If I visit a site with either a complex popup cookies notification or more than one popup the im out. I dont have time for sites that mess you around even worse if they have dark patterns to trick you into accepting the cookies. so all of my websites dont have cookies, which means no google tracking or any others.",
+    "date": "15/10/2026",
+    "live": true
+  },
+  {
+    "id": "art2",
+    "title": "Dyslexia and coding",
+    "body": "A little while back I was working with a person to update my CV in preparation for applying for new jobs. they sent me a copy of my draft CV back to me with what felt like a hundred questions marked in blue writing that they wanted a response on before they could move on to make some final edits to it. Well I tried typing my responses in the word document, but the formatting of the document would go wrong, its a CV which is laid out in a certain way, it was quite distracting, I was breaking the draft document whilst trying to provide the responses. so instead I thought this would be much better if I could just be asked the questions and then I could speak the answers, much easier and more natural. so I built with the help of claude a sort of automated survey tool. The tool was a website where I could upload a document where the questions were highlighted in a certain colour it would pick them all out then ask me one by one using a inbuilt Mac voice on my computer questions like \"can you give me some examples of - Communicating complex ideas to diverse stakeholders using storytelling and visualisation / breaking down complex problems in a fast-paced environment\" and then the after reading the question I was able to speak my response, it converted my speech into text spellchecked it and asked me the next question. after about half an hour I had answered all of the questions in the draft cv and then it integrated all of my answers back into the word doc ready to be sent back to the copywriter to do some final edits to my cv. I quite think this method of writing documents could be useful to lots of people I might expand on it a publish it at some point.",
+    "date": "15/10/2026",
+    "live": true
+  },
+  {
+    "id": "art3",
+    "title": "this font is odd",
+    "body": "the font used on the website is basically my own handwriting and is copywrited by me, I created it using my remarkable which is a rather nice eink paper tablet for handwriting, from there having created some samples of my handwriting I imported the text into glyphs for Mac and set about tidying it up and creating a ttf that I can use on my computer, websites and even printout if I want. also I can talk faster than I can type like most humans, so to be able to write in my own handwriting at the speed os speech is rather good.",
+    "date": "15/10/2026",
+    "live": true
+  }
+]
