@@ -1,30 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { getLiveArticles, getWelcome } from '../articles'
-
-function stripHtml(html) {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
-  return tmp.textContent || ''
-}
-
-function truncate(text, maxLen = 200) {
-  const plain = stripHtml(text)
-  if (plain.length <= maxLen) return plain
-  const cut = plain.lastIndexOf(' ', maxLen)
-  return plain.slice(0, cut > 0 ? cut : maxLen) + '...'
-}
-
-// Phases forward:  list -> step1 -> step2 -> step3 -> open
-// Phases back:     open -> back3 -> back2 -> back1 -> list
-//
-// step1: welcome collapses, others collapse, title grows, snippet stays — all together
-// step2: date squeezes in
-// step3: remaining body unrolls like a sheet
-//
-// back3: body rolls back up
-// back2: date squeezes out
-// back1: title shrinks, others expand, welcome expands
+import ArticleBody from '../components/ArticleBody'
 
 export default function Home() {
   const { id } = useParams()
@@ -53,34 +30,29 @@ export default function Home() {
     setPhase('step1')
     setTimeout(() => {
       setPhase('step2')
-      setTimeout(() => {
-        setPhase('step3')
-        setTimeout(() => setPhase('open'), 500)
-      }, 250)
+      setTimeout(() => setPhase('open'), 600)
     }, 400)
   }
 
   function closeArticle() {
     window.history.pushState(null, '', '/')
 
-    setPhase('back3')
+    setPhase('back2')
+    setTimeout(() => setPhase('back2b'), 100)
     setTimeout(() => {
       setPhase('back1')
       setTimeout(() => {
         setPhase('list')
         setActiveId(null)
-      }, 400)
+      }, 350)
     }, 400)
   }
 
   useEffect(() => {
     function onPopState() {
       const match = window.location.pathname.match(/^\/article\/(.+)$/)
-      if (match) {
-        openArticle(match[1])
-      } else {
-        closeArticle()
-      }
+      if (match) openArticle(match[1])
+      else closeArticle()
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -88,36 +60,34 @@ export default function Home() {
 
   function handleClick(e, articleId, isActive) {
     e.preventDefault()
-    if (phase === 'list') {
-      openArticle(articleId)
-    } else if (phase === 'open' && isActive) {
-      closeArticle()
-    }
+    if (phase === 'list') openArticle(articleId)
+    else if (phase === 'open' && isActive) closeArticle()
   }
 
-  const expanded = ['step1','step2','step3','open'].includes(phase)
-  const dateIn = ['step2','step3','open'].includes(phase)
-  const bodyIn = ['step3','open'].includes(phase)
-  const closing = ['back3','back1'].includes(phase)
-  const titleOut = phase === 'back1'
+  const expanded = ['step1','step2','open'].includes(phase)
+  const othersBack = ['back2b','back1'].includes(phase)
+
+  function bodyMode(isActive) {
+    if (!isActive) return 'condensed'
+    if (['step1','step2','open'].includes(phase)) return phase === 'step1' ? 'expanding' : 'open'
+    if (['back2','back2b','back1'].includes(phase)) return 'condensing'
+    return 'condensed'
+  }
 
   return (
     <main className="page">
-      {/* Welcome message — collapses in step1 */}
-      <div className={`welcome-area ${expanded ? 'gone' : ''} ${titleOut ? 'returning' : ''}`}>
+      <div className={`welcome-area ${expanded && !othersBack ? 'gone' : ''} ${othersBack ? 'returning' : ''}`}>
         {welcome && (
           <div className="intro" dangerouslySetInnerHTML={{ __html: welcome.body }} />
         )}
       </div>
 
-      {/* Back link — appears after welcome gone */}
       {expanded && (
         <div className={`back-area ${phase === 'step1' ? 'entering' : ''}`}>
           <a href="/" onClick={(e) => { e.preventDefault(); closeArticle() }} className="back-link">&lt; back</a>
         </div>
       )}
 
-      {/* Articles */}
       <ul className="article-list">
         {articles.map((a) => {
           const isActive = a.id === activeId
@@ -128,37 +98,27 @@ export default function Home() {
               key={a.id}
               className={[
                 'article-item-wrap',
-                isOther && expanded ? 'away' : '',
-                isOther && titleOut ? 'returning' : '',
+                isOther && expanded && !othersBack ? 'away' : '',
+                isOther && othersBack ? 'returning' : '',
                 isActive && expanded ? 'active-open' : '',
               ].join(' ')}
             >
-              <a
-                href={isActive ? '/' : `/article/${a.id}`}
-                onClick={(e) => handleClick(e, a.id, isActive)}
+              <div
                 className={[
                   'article-link-block',
                   isActive && expanded ? 'grown' : '',
                 ].join(' ')}
+                onClick={(e) => handleClick(e, a.id, isActive)}
+                style={{ cursor: 'pointer' }}
               >
                 <span className="article-title">{a.title}</span>
 
-                {isActive && dateIn && (
-                  <span className={`article-date squeezed ${dateIn ? 'show' : ''}`}>{a.date}</span>
+                {isActive && expanded && (
+                  <span className={`article-date squeezed show`}>{a.date}</span>
                 )}
 
-                <span className="article-summary">{truncate(a.body)}</span>
-              </a>
-
-              {isActive && (
-                <div
-                  className={`article-unroll ${bodyIn && !closing ? 'reveal' : ''} ${phase === 'back3' ? 'hiding' : ''}`}
-                  onClick={() => phase === 'open' && closeArticle()}
-                  style={{ cursor: phase === 'open' ? 'pointer' : 'default' }}
-                >
-                  <div className="article-body" dangerouslySetInnerHTML={{ __html: a.body }} />
-                </div>
-              )}
+                <ArticleBody preview={a.preview} html={a.body} mode={bodyMode(isActive)} />
+              </div>
             </li>
           )
         })}

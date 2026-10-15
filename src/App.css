@@ -144,7 +144,6 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  text-decoration: none;
   color: #46413d;
   cursor: pointer;
 }
@@ -153,14 +152,9 @@
   text-decoration: underline;
 }
 
-/* Grown state — title large, acts as heading */
+/* Grown state */
 .article-link-block.grown {
   cursor: pointer;
-  text-decoration: none;
-}
-
-.article-link-block.grown:hover {
-  text-decoration: none;
 }
 
 .article-link-block.grown .article-title {
@@ -174,17 +168,13 @@
   transition: font-size 0.4s ease;
 }
 
-.article-summary {
-  font-size: 18px;
-}
-
-/* Date — squeezes in between title and snippet */
+/* Date — squeezes in */
 .article-date {
   font-size: 16px;
   opacity: 0;
   max-height: 0;
   overflow: hidden;
-  transition: opacity 0.25s ease, max-height 0.25s ease;
+  transition: opacity 0.3s ease, max-height 0.3s ease;
 }
 
 .article-date.squeezed.show {
@@ -192,19 +182,71 @@
   max-height: 30px;
 }
 
-/* Article body — unrolls like a sheet laid down */
-.article-unroll {
-  clip-path: inset(0 0 100% 0);
-  transition: clip-path 0.5s ease-out;
-  margin-top: 16px;
+/* Article body container — cross-fades between preview and full */
+.article-body-container {
+  position: relative;
+  font-size: 18px;
 }
 
-.article-unroll.reveal {
+/* Preview: plain text, first 20 words */
+.body-preview {
+  line-height: 1.3;
+  transition: opacity 0.3s ease;
+}
+
+.body-preview.fade-out {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.body-preview.fade-in {
+  opacity: 1;
+  position: relative;
+}
+
+/* Full body: HTML with paragraph spacing, unrolls via clip-path */
+.body-full {
+  line-height: 1.6;
+  transition: opacity 0.3s ease, clip-path 0.5s ease-out;
+}
+
+.body-full.fade-out {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  clip-path: inset(0 0 100% 0);
+}
+
+.body-full.fade-in {
+  opacity: 1;
+  position: relative;
+}
+
+/* Expanding: show full text but clipped initially */
+.article-body-container.expanding .body-full {
+  clip-path: inset(0 0 calc(100% - 60px) 0);
+}
+
+/* Open: fully revealed */
+.article-body-container.open .body-full {
   clip-path: inset(0 0 0 0);
 }
 
-.article-unroll.hiding {
-  clip-path: inset(0 0 100% 0);
+/* Condensing: clip back down */
+.article-body-container.condensing .body-full {
+  clip-path: inset(0 0 calc(100% - 60px) 0);
+  transition: opacity 0.3s ease, clip-path 0.35s ease-in;
+}
+
+.body-full p + p {
+  margin-top: 16px;
 }
 
 /* Article page */
@@ -433,12 +475,14 @@
   text-decoration: underline;
 }
 
-.article-body a {
+.article-body a,
+.body-full a {
   color: #d4532b;
   text-decoration: underline;
 }
 
 .article-body img,
+.body-full img,
 .editor-body img {
   max-width: 100%;
   height: auto;
@@ -556,6 +600,10 @@
 
   .footer {
     padding: 16px;
+  }
+
+  body {
+    font-size: 20px;
   }
 
   .manage-layout {

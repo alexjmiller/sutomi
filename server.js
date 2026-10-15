@@ -39,6 +39,21 @@ function uniqueSlug(title, articles) {
   return `${slug}-${i}`
 }
 
+function stripHtml(html) {
+  return html.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim()
+}
+
+function makePreview(body, maxLen = 200) {
+  const plain = stripHtml(body || '')
+  if (plain.length <= maxLen) return plain
+  const cut = plain.lastIndexOf(' ', maxLen)
+  return plain.slice(0, cut > 0 ? cut : maxLen) + '...'
+}
+
+function withPreview(article) {
+  return { ...article, preview: makePreview(article.body) }
+}
+
 function auth(req, res, next) {
   const token = req.headers.authorization
   if (token !== `Bearer ${PASSWORD}`) {
@@ -56,7 +71,7 @@ app.get('/api/welcome', (_req, res) => {
 // Public: get live articles (excluding welcome)
 app.get('/api/articles', (_req, res) => {
   const articles = readArticles().filter((a) => a.live && a.type !== 'welcome')
-  res.json(articles)
+  res.json(articles.map(withPreview))
 })
 
 // Auth: get all articles (including drafts)
