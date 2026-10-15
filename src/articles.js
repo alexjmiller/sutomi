@@ -13,6 +13,11 @@ function authHeaders() {
   }
 }
 
+export async function getWelcome() {
+  const res = await fetch('/api/welcome')
+  return res.json()
+}
+
 export async function getLiveArticles() {
   const res = await fetch(API)
   return res.json()

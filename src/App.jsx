@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import Home from './pages/Home'
-import Article from './pages/Article'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ManageArticles from './pages/ManageArticles'
@@ -31,7 +30,7 @@ export default function App() {
         <Header user={user} onLogout={handleLogout} />
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/article/:id" element={<Article />} />
+          <Route path="/article/:id" element={<Home />} />
           <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} />
           <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
           <Route path="/articles" element={user ? <ManageArticles /> : <Navigate to="/login" />} />

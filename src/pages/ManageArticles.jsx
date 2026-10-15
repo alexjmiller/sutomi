@@ -5,12 +5,17 @@ import RichEditor from '../components/RichEditor'
 
 export default function ManageArticles() {
   const [articles, setArticles] = useState([])
+  const [welcome, setWelcome] = useState(null)
   const [editing, setEditing] = useState(null)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [isWelcome, setIsWelcome] = useState(false)
 
   function refresh() {
-    getAllArticles().then(setArticles)
+    getAllArticles().then((all) => {
+      setWelcome(all.find((a) => a.type === 'welcome') || null)
+      setArticles(all.filter((a) => a.type !== 'welcome'))
+    })
   }
 
   useEffect(() => { refresh() }, [])
@@ -19,20 +24,25 @@ export default function ManageArticles() {
     setEditing('new')
     setTitle('')
     setBody('')
+    setIsWelcome(false)
   }
 
   function handleEdit(article) {
     setEditing(article.id)
     setTitle(article.title)
     setBody(article.body)
+    setIsWelcome(article.type === 'welcome')
   }
 
   async function handlePublish() {
-    if (!title.trim()) return
+    if (!isWelcome && !title.trim()) return
     if (editing === 'new') {
       await createArticle(title, body)
     } else {
-      await updateArticle(editing, { title, body })
+      const updated = await updateArticle(editing, { title, body })
+      if (updated.id !== editing) {
+        setEditing(updated.id)
+      }
     }
     setEditing(null)
     refresh()
@@ -40,6 +50,10 @@ export default function ManageArticles() {
 
   async function handleDelete() {
     if (editing === 'new') {
+      setEditing(null)
+      return
+    }
+    if (isWelcome) {
       setEditing(null)
       return
     }
@@ -60,6 +74,13 @@ export default function ManageArticles() {
 
       <div className="manage-layout">
         <div className="manage-sidebar">
+          {welcome && (
+            <div className="manage-section">
+              <button className="manage-article-name" onClick={() => handleEdit(welcome)}>
+                Welcome message
+              </button>
+            </div>
+          )}
           <ul className="manage-list">
             {articles.map((a) => (
               <li key={a.id} className="manage-item">
@@ -80,21 +101,25 @@ export default function ManageArticles() {
 
         {editing && (
           <div className="editor">
-            <input
-              className="editor-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Article title"
-            />
+            {!isWelcome && (
+              <input
+                className="editor-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Article title"
+              />
+            )}
             <RichEditor
               value={body}
               onChange={setBody}
-              placeholder="Article body"
+              placeholder={isWelcome ? 'Welcome message' : 'Article body'}
             />
             <div className="editor-actions">
               <button className="editor-btn publish" onClick={handlePublish}>Publish</button>
-              <button className="editor-btn delete" onClick={handleDelete}>Delete</button>
+              {!isWelcome && (
+                <button className="editor-btn delete" onClick={handleDelete}>Delete</button>
+              )}
             </div>
           </div>
         )}

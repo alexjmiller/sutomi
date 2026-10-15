@@ -27,6 +27,18 @@ function writeArticles(articles) {
   writeFileSync(DATA_FILE, JSON.stringify(articles, null, 2))
 }
 
+function slugify(title) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30).replace(/-$/, '')
+}
+
+function uniqueSlug(title, articles) {
+  let slug = slugify(title)
+  if (!articles.some((a) => a.id === slug)) return slug
+  let i = 2
+  while (articles.some((a) => a.id === `${slug}-${i}`)) i++
+  return `${slug}-${i}`
+}
+
 function auth(req, res, next) {
   const token = req.headers.authorization
   if (token !== `Bearer ${PASSWORD}`) {
@@ -35,9 +47,15 @@ function auth(req, res, next) {
   next()
 }
 
-// Public: get live articles
+// Public: get welcome message
+app.get('/api/welcome', (_req, res) => {
+  const welcome = readArticles().find((a) => a.type === 'welcome')
+  res.json(welcome || null)
+})
+
+// Public: get live articles (excluding welcome)
 app.get('/api/articles', (_req, res) => {
-  const articles = readArticles().filter((a) => a.live)
+  const articles = readArticles().filter((a) => a.live && a.type !== 'welcome')
   res.json(articles)
 })
 
@@ -52,7 +70,7 @@ app.post('/api/articles', auth, (req, res) => {
   if (!title) return res.status(400).json({ error: 'title required' })
   const articles = readArticles()
   const article = {
-    id: Date.now().toString(36),
+    id: uniqueSlug(title, articles),
     title,
     body: body || '',
     date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -69,7 +87,12 @@ app.put('/api/articles/:id', auth, (req, res) => {
   const idx = articles.findIndex((a) => a.id === req.params.id)
   if (idx === -1) return res.status(404).json({ error: 'not found' })
   const { title, body, live } = req.body
-  if (title !== undefined) articles[idx].title = title
+  if (title !== undefined && title !== articles[idx].title && articles[idx].type !== 'welcome') {
+    articles[idx].title = title
+    articles[idx].id = uniqueSlug(title, articles.filter((_, i) => i !== idx))
+  } else if (title !== undefined) {
+    articles[idx].title = title
+  }
   if (body !== undefined) articles[idx].body = body
   if (live !== undefined) articles[idx].live = live
   writeArticles(articles)

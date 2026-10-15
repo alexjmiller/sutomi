@@ -3,7 +3,8 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 export default function RichEditor({ value, onChange, placeholder }) {
   const editorRef = useRef(null)
   const [menu, setMenu] = useState(null)
-  const [linkInput, setLinkInput] = useState(null)
+  const [inputMode, setInputMode] = useState(null) // 'link' | 'image'
+  const [inputUrl, setInputUrl] = useState('')
   const savedSelection = useRef(null)
 
   useEffect(() => {
@@ -42,30 +43,60 @@ export default function RichEditor({ value, onChange, placeholder }) {
     return null
   }
 
+  function getParentImage() {
+    const sel = window.getSelection()
+    if (!sel.rangeCount) return null
+    const node = sel.anchorNode
+    if (node.tagName === 'IMG') return node
+    if (node.nodeType === 1) {
+      const img = node.querySelector('img')
+      if (img) return img
+    }
+    if (node.parentNode) {
+      const prev = sel.getRangeAt(0).startContainer
+      if (prev.tagName === 'IMG') return prev
+    }
+    return null
+  }
+
   function handleContextMenu(e) {
-    e.preventDefault()
     saveSelection()
 
     const sel = window.getSelection()
     const hasSelection = sel.toString().trim().length > 0
     const existingLink = getParentLink()
+    const existingImage = getParentImage() || (e.target.tagName === 'IMG' ? e.target : null)
+
+    // Only show custom menu when relevant — otherwise let browser menu through for spellcheck
+    if (!hasSelection && !existingLink && !existingImage) return
+
+    e.preventDefault()
 
     setMenu({
       x: e.clientX,
       y: e.clientY,
       hasSelection,
       existingLink,
+      existingImage,
     })
-    setLinkInput(null)
+    setInputMode(null)
+    setInputUrl('')
   }
 
   function closeMenu() {
     setMenu(null)
-    setLinkInput(null)
+    setInputMode(null)
+    setInputUrl('')
   }
 
   function handleAddLink() {
-    setLinkInput({ url: menu.existingLink ? menu.existingLink.href : '' })
+    setInputUrl(menu.existingLink ? menu.existingLink.href : '')
+    setInputMode('link')
+  }
+
+  function handleAddImage() {
+    setInputUrl(menu.existingImage ? menu.existingImage.src : '')
+    setInputMode('image')
   }
 
   function handleRemoveLink() {
@@ -77,34 +108,47 @@ export default function RichEditor({ value, onChange, placeholder }) {
     closeMenu()
   }
 
-  function handleLinkSubmit(e) {
+  function handleRemoveImage() {
+    if (menu.existingImage) {
+      menu.existingImage.remove()
+      handleInput()
+    }
+    closeMenu()
+  }
+
+  function handleSubmit(e) {
     e.preventDefault()
-    const url = linkInput.url.trim()
+    const url = inputUrl.trim()
     if (!url) return
 
     restoreSelection()
 
-    if (menu.existingLink) {
-      menu.existingLink.href = url
+    if (inputMode === 'image') {
+      if (menu.existingImage) {
+        menu.existingImage.src = url
+      } else {
+        const img = document.createElement('img')
+        img.src = url
+        img.alt = ''
+        const sel = window.getSelection()
+        if (sel.rangeCount > 0) {
+          sel.getRangeAt(0).insertNode(img)
+        }
+      }
     } else {
-      const sel = window.getSelection()
-      if (sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0)
-        const selectedText = range.toString()
-        if (selectedText) {
+      if (menu.existingLink) {
+        menu.existingLink.href = url
+      } else {
+        const sel = window.getSelection()
+        if (sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0)
+          const selectedText = range.toString()
           const a = document.createElement('a')
           a.href = url
           a.target = '_blank'
           a.rel = 'noopener'
-          a.textContent = selectedText
+          a.textContent = selectedText || url
           range.deleteContents()
-          range.insertNode(a)
-        } else {
-          const a = document.createElement('a')
-          a.href = url
-          a.target = '_blank'
-          a.rel = 'noopener'
-          a.textContent = url
           range.insertNode(a)
         }
       }
@@ -143,13 +187,13 @@ export default function RichEditor({ value, onChange, placeholder }) {
           className="context-menu"
           style={{ left: menu.x, top: menu.y }}
         >
-          {linkInput ? (
-            <form onSubmit={handleLinkSubmit} className="context-link-form">
+          {inputMode ? (
+            <form onSubmit={handleSubmit} className="context-link-form">
               <input
-                type="url"
-                value={linkInput.url}
-                onChange={(e) => setLinkInput({ url: e.target.value })}
-                placeholder="https://"
+                type="text"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                placeholder={inputMode === 'image' ? '/image.svg' : 'https://'}
                 className="context-link-input"
                 autoFocus
               />
@@ -167,8 +211,19 @@ export default function RichEditor({ value, onChange, placeholder }) {
                   remove link
                 </button>
               )}
-              {!menu.hasSelection && !menu.existingLink && (
-                <span className="context-menu-item disabled">select text to add link</span>
+              {menu.existingImage ? (
+                <>
+                  <button className="context-menu-item" onClick={handleAddImage}>
+                    edit image
+                  </button>
+                  <button className="context-menu-item" onClick={handleRemoveImage}>
+                    remove image
+                  </button>
+                </>
+              ) : (
+                <button className="context-menu-item" onClick={handleAddImage}>
+                  add image
+                </button>
               )}
             </>
           )}
