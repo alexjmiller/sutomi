@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 export default function Header({ user, onLogout }) {
+  const location = useLocation()
+  const onDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/articles')
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -22,7 +24,11 @@ export default function Header({ user, onLogout }) {
       </div>
       <div className="header-right">
         {user ? (
-          <button className="login-link" onClick={onLogout}>{user.name}</button>
+          onDashboard ? (
+            <button className="login-link" onClick={onLogout}>logout</button>
+          ) : (
+            <Link to="/dashboard" className="login-link">{user.name}</Link>
+          )
         ) : (
           <Link to="/login" className="login-link">login</Link>
         )}

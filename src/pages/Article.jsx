@@ -30,9 +30,9 @@ export default function Article() {
       <Link to="/" className="back-link">&lt; back</Link>
       <div className="article-header-row">
         <h1 className="article-heading">{article.title}</h1>
-        <span className="article-date">date {article.date}</span>
+        <span className="article-date">{article.date}</span>
       </div>
-      <div className="article-body">{article.body}</div>
+      <div className="article-body" dangerouslySetInnerHTML={{ __html: article.body }} />
     </main>
   )
 }

@@ -2,10 +2,17 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getLiveArticles } from '../articles'
 
+function stripHtml(html) {
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html
+  return tmp.textContent || ''
+}
+
 function truncate(text, maxLen = 200) {
-  if (!text || text.length <= maxLen) return text
-  const cut = text.lastIndexOf(' ', maxLen)
-  return text.slice(0, cut > 0 ? cut : maxLen) + '...'
+  const plain = stripHtml(text)
+  if (plain.length <= maxLen) return plain
+  const cut = plain.lastIndexOf(' ', maxLen)
+  return plain.slice(0, cut > 0 ? cut : maxLen) + '...'
 }
 
 export default function Home() {

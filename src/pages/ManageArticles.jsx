@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getAllArticles, createArticle, updateArticle, deleteArticle } from '../articles'
+import RichEditor from '../components/RichEditor'
 
 export default function ManageArticles() {
   const [articles, setArticles] = useState([])
@@ -86,12 +87,10 @@ export default function ManageArticles() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Article title"
             />
-            <textarea
-              className="editor-body"
+            <RichEditor
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
               placeholder="Article body"
-              rows={12}
             />
             <div className="editor-actions">
               <button className="editor-btn publish" onClick={handlePublish}>Publish</button>
