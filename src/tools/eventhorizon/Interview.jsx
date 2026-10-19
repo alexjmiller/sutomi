@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import * as api from './api'
-import { fmtIsoDate, spellIso } from './time'
+import { fmtIsoDate, fmtShortIso, spellIso } from './time'
 import { SpaceBar } from './SpaceBar'
 
 // Sessions are keyed by space so an interview begun in Test can't be committed into Default.
@@ -46,7 +46,31 @@ export function savedSessions(space) {
   return out
 }
 
-const stepsText = (i) => (i.steps ? `${i.steps} step${i.steps === 1 ? '' : 's'}` : 'no tasks')
+/** The editable chain rows for an instance: the service's preview, each kept until unticked, plus custom steps. */
+const rowsFrom = (chain = []) => chain.map((st) => ({ key: st.key, title: st.title, date: st.date, kind: st.kind, custom: Boolean(st.custom), once: Boolean(st.once), kept: true }))
+export const rowsOf = (inst) => inst.edit || rowsFrom(inst.chain)
+const rowComplete = (r) => r.kept && r.title.trim() && r.date
+const keptRows = (inst) => rowsOf(inst).filter(rowComplete)
+const stepsText = (i) => { const n = keptRows(i).length; return n ? `${n} step${n === 1 ? '' : 's'}` : 'no tasks' }
+
+/** "turns 37" when the instance is a birthday with a known date of birth before the anchor year. */
+function turnsText(inst) {
+  if (inst.node !== 'birthday') return null
+  const born = inst.slots?.date ? Number(inst.slots.date.slice(0, 4)) : NaN
+  const year = Number(inst.anchorDate.slice(0, 4))
+  return Number.isFinite(born) && born < year ? `turns ${year - born}` : null
+}
+
+/** The chain as the person wants it, or undefined when nothing was changed (then the service's own chain stands). */
+export function editsFor(inst) {
+  const rows = rowsOf(inst)
+  const orig = new Map((inst.chain || []).map((st) => [st.key, st]))
+  const changed = rows.some((r) => (r.custom ? rowComplete(r) : !r.kept || r.title !== orig.get(r.key)?.title || r.date !== orig.get(r.key)?.date))
+  if (!changed) return undefined
+  return rows.filter(rowComplete).map((r) => (r.custom
+    ? { title: r.title.trim(), date: r.date, ...(r.once ? { once: true } : {}) }
+    : { key: r.key, title: r.title.trim(), date: r.date }))
+}
 
 /** "MOT test · the Golf" — a deferred entry's node with whatever was already known. */
 export const deferredLabel = (d) => d.nodes.map((n) => n.name).join(', ') + Object.values(d.carried || {}).map((v) => ` · ${v}`).join('')
@@ -149,7 +173,7 @@ export default function Interview({ kind, id }) {
         transcript.push({ kind: 'error', text: turn.error }, { kind: 'q', prompt: turn.question.prompt, help: turn.question.help })
       } else {
         if (turn.added) {
-          instances = [...instances, turn.added]
+          instances = [...instances, { ...turn.added, edit: rowsFrom(turn.added.chain) }]
           lastAdded = turn.added.title
           transcript.push({ kind: 'added', title: turn.added.title })
         }
@@ -167,13 +191,17 @@ export default function Interview({ kind, id }) {
     setBusy(true)
     setProblem(null)
     try {
-      const { items } = await api.commit(kept)
+      const { items } = await api.commit(kept.map(({ edit, ...inst }) => { const edits = editsFor({ ...inst, edit }); return edits ? { ...inst, edits } : inst })) // eslint-disable-line no-unused-vars
       apply({ ...session, results: items })
     } catch (e) {
       setProblem(e.message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function editChain(index, rows) {
+    apply({ ...session, instances: session.instances.map((inst, i) => (i === index ? { ...inst, edit: rows } : inst)) })
   }
 
   function resume() {
@@ -191,7 +219,7 @@ export default function Interview({ kind, id }) {
 
   const instances = session?.instances || []
   const deferred = session?.deferred || []
-  const map = <MapPanel instances={instances} deferred={deferred} lastAdded={session?.lastAdded} />
+  const map = <MapPanel instances={instances} deferred={deferred} lastAdded={session?.lastAdded} onEdit={session && !session.results ? editChain : null} />
 
   return (
     <main className="page eh">
@@ -298,6 +326,24 @@ function AnswerInput({ question: q, onSend, onLater }) {
     onSend(text)
   }
 
+  if (q.kind === 'duration') {
+    // the engine reads "1h", "90m", "1h30"…; chips cover the usual answers, the box anything else
+    const chips = [['30m', 'half an hour'], ['1h', 'an hour'], ['2h', 'two hours'], ['4h', 'half a day']]
+    return (
+      <form className="eh-answer" onSubmit={submit}>
+        <div className="eh-chips">
+          {chips.map(([v, t]) => <button key={v} type="button" className="eh-chipbtn" onClick={() => onSend(v)}>{t}</button>)}
+        </div>
+        <div className="eh-row">
+          <input ref={ref} className="eh-input" type="text" value={text} placeholder="or e.g. 1h30 — skip for an hour" aria-label={q.prompt} onChange={(e) => setText(e.target.value)} />
+          <button type="submit" className="eh-btn primary" disabled={!text.trim() && !canSkip}>{!text.trim() && canSkip ? 'skip' : 'send'}</button>
+        </div>
+        {q.help && <p className="eh-help">{q.help}</p>}
+        <p className="eh-kbd">durations can be "1h", "90m" or "1h30"{later && <> · {later}</>}</p>
+      </form>
+    )
+  }
+
   if (q.kind === 'yesno') {
     return (
       <div className="eh-answer">
@@ -327,13 +373,19 @@ function AnswerInput({ question: q, onSend, onLater }) {
           type={q.kind === 'number' ? 'text' : 'text'}
           inputMode={q.kind === 'number' ? 'decimal' : 'text'}
           value={text}
-          placeholder={q.default != null ? showDefault(q) : q.person ? "a name — or 'me'" : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
+          placeholder={q.default != null ? showDefault(q) : q.person ? "a name — or 'me'" : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'time' ? 'e.g. 10:00 or 2.30pm' : q.kind === 'number' ? 'a number' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
           aria-label={q.prompt}
           onChange={(e) => setText(e.target.value)}
         />
         {q.kind === 'date' && (
           <>
             <input ref={dateRef} className="eh-date-hidden" type="date" tabIndex={-1} aria-hidden="true" onChange={(e) => e.target.value && setText(spellIso(e.target.value))} />
+            <button type="button" className="eh-btn" onClick={openPicker}>pick</button>
+          </>
+        )}
+        {q.kind === 'time' && (
+          <>
+            <input ref={dateRef} className="eh-date-hidden" type="time" tabIndex={-1} aria-hidden="true" onChange={(e) => e.target.value && setText(e.target.value)} />
             <button type="button" className="eh-btn" onClick={openPicker}>pick</button>
           </>
         )}
@@ -344,30 +396,31 @@ function AnswerInput({ question: q, onSend, onLater }) {
       {q.help && <p className="eh-help">{q.help}</p>}
       <p className="eh-kbd">
         {q.kind === 'date' && 'dates can be "3 March 2027", "03/03/2027" or "2027-03-03"'}
+        {q.kind === 'time' && 'times can be "10:00", "2.30pm" or "noon"'}
         {q.person && "type a name, or 'me' for yourself"}
         {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {showDefault(q)}</button></>}
         {!q.required && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>skip</button></>}
-        {later && (q.kind === 'date' || q.person || (q.default != null && text.trim()) || (!q.required && text.trim())) && ' · '}
+        {later && (q.kind === 'date' || q.kind === 'time' || q.person || (q.default != null && text.trim()) || (!q.required && text.trim())) && ' · '}
         {later}
       </p>
     </form>
   )
 }
 
-/** The map panel: the product moment. Each finished event lands here as a card. */
-function MapPanel({ instances, deferred, lastAdded }) {
-  const sorted = [...instances].sort((a, b) => a.anchorDate.localeCompare(b.anchorDate))
+/** The map panel: the product moment. Each finished event lands here as a card, its chain listed underneath. */
+function MapPanel({ instances, deferred, lastAdded, onEdit }) {
+  const order = instances.map((inst, index) => ({ inst, index })).sort((a, b) => a.inst.anchorDate.localeCompare(b.inst.anchorDate))
   const aside = (deferred || []).map(deferredLabel)
   return (
     <aside className="eh-map" aria-label="your map">
       <h3 className="eh-h">your map <span className="eh-count">{instances.length}</span></h3>
       {!instances.length && <p className="eh-muted">each finished event appears here</p>}
       <ul className="eh-cards">
-        {sorted.map((i, k) => (
-          <li key={`${i.title}|${i.anchorDate}|${k}`} className={`eh-card${i.title === lastAdded ? ' new' : ''}`}>
-            <strong>{i.title}</strong>
-            <span>{fmtIsoDate(i.anchorDate)}</span>
-            <span className="eh-muted">{i.steps ? `${stepsText(i)} · first on ${fmtIsoDate(i.firstStep)}` : 'no tasks'}</span>
+        {order.map(({ inst, index }) => (
+          <li key={`${inst.title}|${inst.anchorDate}|${index}`} className={`eh-card${inst.title === lastAdded ? ' new' : ''}`}>
+            <strong>{inst.title}</strong>
+            <span>{fmtIsoDate(inst.anchorDate)}{inst.anchorTime ? ` · ${inst.anchorTime}` : ''}{turnsText(inst) ? ` · ${turnsText(inst)}` : ''}</span>
+            <ChainEditor inst={inst} onChange={onEdit ? (rows) => onEdit(index, rows) : null} />
           </li>
         ))}
       </ul>
@@ -380,6 +433,46 @@ function MapPanel({ instances, deferred, lastAdded }) {
         </>
       )}
     </aside>
+  )
+}
+
+/** The chain under a card: tick to keep, move a date, retitle, add a step (optionally just this once). */
+function ChainEditor({ inst, onChange }) {
+  const rows = rowsOf(inst)
+  const set = (i, patch) => onChange(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+  if (!rows.length) return <span className="eh-muted">no tasks</span>
+  const kept = rows.filter(rowComplete).length
+  return (
+    <div className="eh-steps-wrap">
+      <ul className="eh-steps">
+        {rows.map((r, i) => (
+          <li key={r.key || `custom-${i}`} className={`eh-step${r.kept ? '' : ' dropped'}${r.custom ? ' custom' : ''}`}>
+            <input type="checkbox" checked={r.kept} disabled={!onChange} aria-label={`keep: ${r.title || 'new step'}`} onChange={(e) => set(i, { kept: e.target.checked })} />
+            <StepDate value={r.date} disabled={!onChange || !r.kept} onChange={(date) => set(i, { date })} />
+            <input className="eh-step-title" value={r.title} disabled={!onChange || !r.kept} placeholder="what needs doing" aria-label="step" onChange={(e) => set(i, { title: e.target.value })} />
+            {r.custom && onChange && (
+              <label className="eh-step-once"><input type="checkbox" checked={r.once} onChange={(e) => set(i, { once: e.target.checked })} /> just this time</label>
+            )}
+          </li>
+        ))}
+      </ul>
+      {onChange && (
+        <button type="button" className="eh-text-btn" onClick={() => onChange([...rows, { title: '', date: inst.anchorDate, kind: 'task', custom: true, once: false, kept: true }])}>+ add a step</button>
+      )}
+      {!onChange && <span className="eh-muted">{kept} step{kept === 1 ? '' : 's'}</span>}
+    </div>
+  )
+}
+
+/** A step's date as "Wed 28 Apr", with the native picker behind it. */
+function StepDate({ value, disabled, onChange }) {
+  const ref = useRef(null)
+  const open = () => { try { ref.current.showPicker() } catch { ref.current.click() } }
+  return (
+    <>
+      <button type="button" className="eh-step-date" disabled={disabled} onClick={open} aria-label={`date: ${spellIso(value)}`}>{fmtShortIso(value)}</button>
+      <input ref={ref} className="eh-date-hidden" type="date" value={value} tabIndex={-1} aria-hidden="true" onChange={(e) => e.target.value && onChange(e.target.value)} />
+    </>
   )
 }
 
@@ -448,6 +541,11 @@ function Results({ results, instances, deferred }) {
             <strong>{r.title}</strong>
             {r.error ? ` — ${r.error}` : (
               <> — <Link to={`/tools/eventhorizon/calendar?date=${anchorFor(r.title) || ''}`}>see it on the map</Link></>
+            )}
+            {r.chain?.length > 0 && (
+              <ul className="eh-steps final">
+                {r.chain.map((st, j) => <li key={st.key || j} className="eh-step"><span className="eh-step-date">{fmtShortIso(st.date)}</span> {st.title}{st.once ? <span className="eh-muted"> · just this time</span> : ''}</li>)}
+              </ul>
             )}
           </li>
         ))}

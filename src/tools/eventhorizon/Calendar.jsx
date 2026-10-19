@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { DateTime } from 'luxon'
 import * as api from './api'
 import {
-  CATEGORIES, instanceTag, nodeId, isAnchor, isChainTask, isBand, isBankHoliday, isTransparent, isBirthday, ageOn, hasTag,
+  CATEGORIES, instanceTag, nodeId, isAnchor, isChainTask, isBand, isTransparent, isBirthday, ageOn, hasTag, kindOf, isTask, isInfo,
   startOf, endOf, fmtTime, fmtDay, fmtMonth, whenText, monthGrid, horizon, beyondHorizon, tintFor, byDay, sortByStart, dedupe,
 } from './time'
 import { SpaceBar } from './SpaceBar'
@@ -100,10 +100,10 @@ export default function Calendar() {
   const dateParam = params.get('date')
   const parsed = dateParam ? DateTime.fromISO(dateParam) : null
   const cursor = (parsed?.isValid ? parsed : today).startOf('day')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('all') // all | task | event | info — by kind
   const [category, setCategory] = useState('all')
   const [hideDone, setHideDone] = useState(false)
-  const [hideBands, setHideBands] = useState(false)
+  const [showInfo, setShowInfo] = useState(false) // information in the month grid and list (the day view always has it)
   const [pages, setPages] = useState(1)
   const [selected, setSelected] = useState(null)
   const [dayOpen, setDayOpen] = useState(null)
@@ -136,16 +136,15 @@ export default function Calendar() {
 
   const all = useMemo(() => occ.itemsFor(keys), [occ.version, occ.generation, keyList]) // eslint-disable-line react-hooks/exhaustive-deps
   const ageOf = useBirthYears(all)
-  const label = useCallback((item) => { const age = ageOf(item); return age == null ? item.title : `${item.title} · ${age}` }, [ageOf])
+  const label = useCallback((item) => { const age = ageOf(item); return age == null ? item.title : `${item.title} · turns ${age}` }, [ageOf])
   const visible = useMemo(() => all.filter((it) => {
-    if (filter === 'tasks' && !it.is_task) return false
-    if (filter === 'events' && (it.is_task || isTransparent(it))) return false
-    if (filter === 'info' && !isTransparent(it)) return false
+    if (filter !== 'all' && kindOf(it) !== filter) return false
     if (hideDone && it.completed_at) return false
-    if (hideBands && (isBand(it) || isBankHoliday(it))) return false
     if (category !== 'all' && categoryOf(it, nodes) !== category) return false
     return true
-  }), [all, filter, hideDone, hideBands, category, nodes])
+  }), [all, filter, hideDone, category, nodes])
+  // The month grid and the list show tasks and events; information only when asked for (or filtered to).
+  const listed = useMemo(() => (showInfo || filter === 'info' ? visible : visible.filter((it) => !isInfo(it))), [visible, showInfo, filter])
 
   const selectedItem = selected ? all.find((it) => it.occurrence_id === selected) : null
 
@@ -195,8 +194,8 @@ export default function Calendar() {
       <div className="eh-filters">
         <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="show">
           <option value="all">everything</option>
-          <option value="tasks">to do</option>
-          <option value="events">events</option>
+          <option value="task">to do</option>
+          <option value="event">events</option>
           <option value="info">information</option>
         </select>
         <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="kind">
@@ -205,15 +204,15 @@ export default function Calendar() {
           <option value="other">other</option>
         </select>
         <label className="eh-checklabel"><input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} /> hide completed</label>
-        <label className="eh-checklabel"><input type="checkbox" checked={hideBands} onChange={(e) => setHideBands(e.target.checked)} /> hide terms &amp; bank holidays</label>
+        <label className="eh-checklabel"><input type="checkbox" checked={showInfo} onChange={(e) => setShowInfo(e.target.checked)} /> show information (terms, bank holidays)</label>
         {occ.loading && <span className="eh-muted">loading…</span>}
         {(occ.error || problem) && <span className="eh-problem">{occ.error || problem}</span>}
       </div>
 
       <div className={`eh-cal-body${panel ? ' with-panel' : ''}`}>
         {view === 'month'
-          ? <MonthGrid weeks={weeks} monthStart={monthStart} items={visible} today={today} wide={wide} label={label} onSelect={setSelected} onDay={setDayOpen} onToggle={toggleDone} />
-          : <Agenda cursor={cursor} end={agendaEnd} items={visible} today={today} label={label} onSelect={setSelected} onToggle={toggleDone} onMore={() => setPages(pages + 1)} />}
+          ? <MonthGrid weeks={weeks} monthStart={monthStart} items={listed} today={today} wide={wide} label={label} onSelect={setSelected} onDay={setDayOpen} onToggle={toggleDone} />
+          : <Agenda cursor={cursor} end={agendaEnd} items={listed} today={today} label={label} onSelect={setSelected} onToggle={toggleDone} onMore={() => setPages(pages + 1)} />}
         {panel && <aside className="eh-panel">{panel}</aside>}
       </div>
     </main>
@@ -240,7 +239,7 @@ function itemClass(item) {
   return [
     tag ? 'tinted' : '',
     isAnchor(item) ? 'anchor' : '',
-    item.is_task ? 'task' : '',
+    kindOf(item),
     item.completed_at ? 'done' : '',
     item.time_type === 'timed' ? 'timed' : '',
     isTransparent(item) ? 'transparent' : '',
@@ -302,7 +301,7 @@ function MonthGrid({ weeks, monthStart, items, today, wide, label, onSelect, onD
                 const continuing = it.time_type === 'all_day' && s.toISODate() !== iso
                 return (
                   <div key={it.occurrence_id} className={`eh-chip ${itemClass(it)}`} style={itemStyle(it)}>
-                    {it.is_task && <Check item={it} onToggle={onToggle} />}
+                    {isTask(it) && <Check item={it} onToggle={onToggle} />}
                     <button type="button" className="eh-chip-main" onClick={() => onSelect(it.occurrence_id)} title={label(it)}>
                       {it.time_type === 'timed' && <span className="eh-time">{fmtTime(s)}</span>}
                       <span className="eh-chip-title">{continuing ? '… ' : ''}{label(it)}</span>
@@ -330,7 +329,7 @@ function Row({ item, label, onSelect, onToggle }) {
   if (isBand(item)) return <div className="eh-band-row">{item.title} <span className="eh-muted">· {when}</span></div>
   return (
     <div className={`eh-row-item ${itemClass(item)}`} style={itemStyle(item)}>
-      {item.is_task ? <Check item={item} onToggle={onToggle} /> : <span className="eh-check-space" />}
+      {isTask(item) ? <Check item={item} onToggle={onToggle} /> : <span className="eh-check-space" />}
       <button type="button" className="eh-row-main" onClick={() => onSelect(item.occurrence_id)}>
         <span className="eh-row-title">{label(item)}</span>
         <span className="eh-muted">{when}</span>
@@ -369,12 +368,12 @@ function Agenda({ cursor, end, items, today, label, onSelect, onToggle, onMore }
   )
 }
 
-/** One day: what needs doing, what's on, and the background information, kept apart. */
+/** One day: what needs doing, what's on, and the information strip, kept apart (by kind). */
 function DayList({ iso, items, label, onSelect, onToggle, onClose }) {
   const groups = [
-    ['to do', items.filter((it) => it.is_task)],
-    ['on this day', items.filter((it) => !it.is_task && !isTransparent(it))],
-    ['information', [...uniqueBands(items.filter(isBand)), ...items.filter((it) => isTransparent(it) && !isBand(it))]],
+    ['to do', items.filter(isTask)],
+    ['on this day', items.filter((it) => kindOf(it) === 'event')],
+    ['information', [...uniqueBands(items.filter((it) => isInfo(it) && isBand(it))), ...items.filter((it) => isInfo(it) && !isBand(it))]],
   ].filter(([, list]) => list.length)
   return (
     <div className="eh-detail">
@@ -449,12 +448,13 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved }) {
         <button type="button" className="eh-x" aria-label="close" onClick={onClose}>×</button>
       </div>
       <p className="eh-when">{whenText(item)}</p>
-      {item.is_task && (
+      {isTask(item) && (
         <p className="eh-task-line">
           <Check item={item} onToggle={toggle} /> {item.completed_at ? `completed ${fmtDay(DateTime.fromISO(item.completed_at))}` : 'to do'}
         </p>
       )}
-      {isTransparent(item) && <p className="eh-muted">{isBand(item) ? 'a background band — ' : ''}doesn't block the day</p>}
+      {isInfo(item) && <p className="eh-muted">information{isBand(item) ? ' — a background band' : ''} · doesn't block the day</p>}
+      {!isInfo(item) && isTransparent(item) && <p className="eh-muted">doesn't block the day</p>}
       {item.description && <p className="eh-desc">{item.description}</p>}
       {item.location && <p className="eh-muted">{item.location}</p>}
       {node && <p className="eh-muted">{node.name} · {node.category}{isChainTask(item) && anchor ? ` · part of "${anchor.title}"` : ''}</p>}
@@ -476,7 +476,7 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved }) {
             <ol className="eh-timeline">
               {chain.map((x) => (
                 <li key={x.occurrence_id} className={`eh-tl ${itemClass(x)}${x.occurrence_id === item.occurrence_id ? ' current' : ''}`} style={itemStyle(x)}>
-                  {x.is_task ? <Check item={x} onToggle={toggle} /> : <span className="eh-check-space" />}
+                  {isTask(x) ? <Check item={x} onToggle={toggle} /> : <span className="eh-check-space" />}
                   <span className="eh-tl-date">{fmtDay(startOf(x))}</span>
                   <span className="eh-tl-title">{x.title}{isAnchor(x) ? ' · the event' : ''}</span>
                 </li>

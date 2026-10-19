@@ -15,13 +15,21 @@ export function nodeId(tags = []) {
 }
 export const isChainTask = (item) => Boolean(item.tags?.includes('ehn:task'))
 export const hasTag = (item, tag) => Boolean(item.tags?.includes(tag))
-/** Background bands (school terms and the like): drawn across days, never listed. */
+/**
+ * What an item IS: 'task' (actionable, completable), 'event' (a thing happening) or 'info' (context for
+ * the day: term bands, bank holidays). The substrate says so explicitly; the fallback covers items from
+ * before `kind` existed and goes with `is_task`.
+ */
+export const kindOf = (item) => item.kind || (item.is_task ? 'task' : hasTag(item, 'transparent') ? 'info' : 'event')
+export const isTask = (item) => kindOf(item) === 'task'
+export const isInfo = (item) => kindOf(item) === 'info'
+/** Background bands (school terms and the like): drawn across days, named only where they start. */
 export const isBand = (item) => hasTag(item, 'period')
 export const isBankHoliday = (item) => hasTag(item, 'bank-holiday')
-/** Non-blocking: never a conflict. */
-export const isTransparent = (item) => hasTag(item, 'transparent')
+/** Non-blocking: never a conflict. Information never blocks; an event only if tagged so. */
+export const isTransparent = (item) => isInfo(item) || hasTag(item, 'transparent')
 /** A birthday occurrence whose series start may be the date of birth (own, or an ontology anchor). */
-export const isBirthday = (item) => hasTag(item, 'birthday') && !item.is_task && !isChainTask(item)
+export const isBirthday = (item) => hasTag(item, 'birthday') && !isTask(item) && !isChainTask(item)
 /** Age on this occurrence, or null when the birth year is unknown (start year is this year or later). */
 export function ageOn(item, birthYear, now = DateTime.now()) {
   if (birthYear == null || birthYear >= now.year) return null
@@ -44,6 +52,7 @@ export const fmtShortDay = (dt) => gb(dt).toFormat('ccc d LLL')
 export const fmtTime = (dt) => gb(dt).toFormat('HH:mm')
 export const fmtMonth = (dt) => gb(dt).toFormat('LLLL yyyy')
 export const fmtIsoDate = (iso) => (iso ? fmtDay(DateTime.fromISO(iso)) : '')
+export const fmtShortIso = (iso) => (iso ? fmtShortDay(DateTime.fromISO(iso)) : '')
 /** "26 March 2026" — the spelled form the interview service reads back without ambiguity. */
 export const spellIso = (iso) => (iso ? gb(DateTime.fromISO(iso)).toFormat('d MMMM yyyy') : '')
 
@@ -100,7 +109,7 @@ export function tintFor(tag) {
 
 /** All-day before timed, the events themselves before tasks, then by start; ties by title. */
 export function sortByStart(items) {
-  const rank = (it) => (it.time_type === 'all_day' ? 0 : 2) + (isAnchor(it) ? 0 : 1)
+  const rank = (it) => (it.time_type === 'all_day' ? 0 : 2) + (isTask(it) ? 1 : 0)
   return [...items].sort((a, b) => rank(a) - rank(b) || startOf(a) - startOf(b) || a.title.localeCompare(b.title))
 }
 
