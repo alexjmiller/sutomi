@@ -1,107 +1,183 @@
-// Thinking Machine — one brief as a running conversation: past questions and
-// answers stay visible above, the current question sits at the bottom.
+// Thinking Machine — one brief as a running conversation. Past questions and answers
+// stay visible above (grouped by aim / focus), the current question sits at the bottom.
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  STEPS, STAGES, resolve, isAnswered, displayValue, buildBrief, briefToText, sessionTitle,
+  STATES, buildSteps, getIn, setIn, isAnswered, displayValue, defaultHmw, buildBrief, briefToText,
+  briefTitle, question, newQuestion, migrateV1,
 } from './flow'
 import { getBrief, saveBrief } from './api'
-import { TextInput, ChoiceInput, ListInput, PairInput, HmwInput, CardsInput, SelectInput, TasksInput } from './inputs'
-
-const stepIndex = (id) => Math.max(0, STEPS.findIndex((s) => s.id === id))
-const stageLabel = (id) => STAGES.find((s) => s.id === id)?.label || id
+import {
+  TextInput, ChoiceInput, RouteInput, ListInput, PairInput, HmwInput, CardsInput, SelectInput,
+  TasksInput, LogInput, QuestionsInput, PickInput,
+} from './inputs'
 
 export default function Session({ id }) {
   const navigate = useNavigate()
-  const [loaded, setLoaded] = useState(false)
+  const [brief, setBriefState] = useState(null)
   const [missing, setMissing] = useState(false)
-  const [answers, setAnswers] = useState(null)
-  const [current, setCurrent] = useState(0) // index of the step with the open input
-  const [reached, setReached] = useState(0) // furthest step index shown; STEPS.length = brief
-  const [skipped, setSkipped] = useState([])
-  const [hmwStale, setHmwStale] = useState(false)
-  const [saveState, setSaveState] = useState('saved') // saved | saving | error
+  const [saveState, setSaveState] = useState('saved')
   const [helpOpen, setHelpOpen] = useState(false)
   const [includeOpen, setIncludeOpen] = useState(true)
-  const [copied, setCopied] = useState(false)
+  const [renaming, setRenaming] = useState(null)
   const dirty = useRef(false)
   const timer = useRef(null)
   const bottomRef = useRef(null)
 
-  // Load
+  // Load (migrating v1 briefs on the way in)
   useEffect(() => {
     getBrief(id)
       .then((b) => {
-        setAnswers(b.answers)
-        const idx = b.step === 'brief' ? STEPS.length : stepIndex(b.step)
-        setCurrent(Math.min(idx, STEPS.length))
-        setReached(b.reached ?? idx)
-        setSkipped(b.skipped || [])
-        setHmwStale(Boolean(b.hmwStale))
-        setLoaded(true)
+        if (b.version !== 2) { b = migrateV1(b); dirty.current = true }
+        setBriefState(b)
       })
       .catch(() => setMissing(true))
   }, [id])
 
-  // Autosave (debounced), retry on failure
+  // Autosave, debounced, retry on failure
   const persist = useCallback(async () => {
-    if (!answers) return
+    if (!brief) return
     setSaveState('saving')
     try {
-      await saveBrief(id, {
-        answers,
-        step: current >= STEPS.length ? 'brief' : STEPS[current].id,
-        reached,
-        skipped,
-        hmwStale,
-      })
+      await saveBrief(id, brief)
       dirty.current = false
       setSaveState('saved')
     } catch {
       setSaveState('error')
       timer.current = setTimeout(persist, 5000)
     }
-  }, [id, answers, current, reached, skipped, hmwStale])
+  }, [id, brief])
 
   useEffect(() => {
-    if (!loaded || !dirty.current) return
+    if (!brief || !dirty.current) return
     clearTimeout(timer.current)
     timer.current = setTimeout(persist, 600)
     return () => clearTimeout(timer.current)
-  }, [loaded, persist])
+  }, [brief, persist])
 
-  // Keep the active question in view
   useEffect(() => {
-    if (loaded) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [current, loaded])
+    if (brief) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    setHelpOpen(false)
+  }, [brief?.current]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setHelpOpen(false) }, [current])
-
-  function mark() { dirty.current = true }
-
-  function setAnswer(key, value) {
-    // Changing who/outcome after writing a "How might we" question: invite a review
-    if ((key === 'who' || key === 'outcome') && answers.hmw && value !== answers[key]) setHmwStale(true)
-    if (key === 'hmw') setHmwStale(false)
-    setAnswers((prev) => ({ ...prev, [key]: value }))
-    setSkipped((s) => s.filter((x) => x !== key))
-    mark()
+  /** All state changes go through here so the brief stays one consistent object. */
+  function update(fn) {
+    dirty.current = true
+    setBriefState((prev) => fn(prev))
   }
 
-  function goTo(idx) {
-    setCurrent(idx)
-    setReached((r) => Math.max(r, idx))
-    mark()
+  // ---- helpers on a brief object (pure) ----
+  const visit = (b, key) => ({ ...b, current: key, visited: b.visited.includes(key) ? b.visited : [...b.visited, key] })
+
+  function ensureAim(b) {
+    if (b.questions.some((q) => q.isAim)) return b
+    return { ...b, questions: [...b.questions, newQuestion(b.aim.aim, { isAim: true })] }
+  }
+
+  function startQuestion(b, qid) {
+    let n = { ...b }
+    n.questions = n.questions.map((q) => (q.id === qid ? { ...q, state: 'active', order: q.order || n.loopCount + 1 } : q))
+    if (!b.questions.find((q) => q.id === qid)?.order) n.loopCount = b.loopCount + 1
+    const first = buildSteps(n).find((s) => s.section === qid)
+    return first ? visit(n, first.key) : n
+  }
+
+  function advance(b) {
+    const steps = buildSteps(b)
+    const i = steps.findIndex((s) => s.key === b.current)
+    const nxt = steps[i + 1]
+    return nxt ? visit(b, nxt.key) : visit(b, 'brief')
+  }
+
+  // ---- actions ----
+  function setValue(step, value) {
+    update((b) => {
+      let n = setIn(b, step.path, value)
+      if (step.key === 'aim.aim') n.questions = n.questions.map((q) => (q.isAim ? { ...q, text: value } : q))
+      if (step.key.endsWith('.exit')) {
+        const qid = step.section
+        n.questions = n.questions.map((q) => (q.id === qid ? { ...q, state: value || 'active' } : q))
+      }
+      return n
+    })
+  }
+
+  function setQuestions(items) {
+    update((b) => {
+      const aim = b.questions.filter((q) => q.isAim)
+      const kept = items.map((it) => {
+        const existing = b.questions.find((q) => q.id === it.id)
+        return existing ? { ...existing, text: it.text } : newQuestion(it.text)
+      })
+      const others = b.questions.filter((q) => !q.isAim && (q.from || q.order > 0) && !kept.some((k) => k.id === q.id))
+      return { ...b, questions: [...aim, ...kept, ...others] }
+    })
+  }
+
+  function goDirect() {
+    update((b) => {
+      let n = ensureAim({ ...b, aim: { ...b.aim, discovery: 'direct' } })
+      return startQuestion(n, n.questions.find((q) => q.isAim).id)
+    })
+  }
+
+  function pick(step, choice) {
+    update((b) => {
+      let n = ensureAim(b)
+      const qid = choice === 'aim' ? n.questions.find((q) => q.isAim).id : choice
+      n = setIn(n, step.path, qid)
+      return startQuestion(n, qid)
+    })
+  }
+
+  function addQuestion(step, text) {
+    update((b) => {
+      const from = step.section === 'aim' ? null : step.section
+      return { ...b, questions: [...b.questions, newQuestion(text, { from })] }
+    })
+  }
+
+  function stop(step) {
+    update((b) => visit(setIn(b, step.path, 'stop'), 'brief'))
   }
 
   function next() {
-    const step = STEPS[current]
-    if (step && !isAnswered(step, answers)) setSkipped((s) => (s.includes(step.id) ? s : [...s, step.id]))
-    goTo(current + 1)
+    update((b) => {
+      let n = b
+      const step = buildSteps(n).find((s) => s.key === n.current)
+      if (!step) return visit(n, 'brief')
+      if (step.type === 'questions' && n.aim.discovery !== 'direct') n = { ...n, aim: { ...n.aim, discovery: 'questions' } }
+      if (step.key.endsWith('.supersede')) {
+        const q = question(n, step.section)
+        const text = (q.loop.supersede || '').trim()
+        if (text) {
+          const existing = q.loop.supersededBy && question(n, q.loop.supersededBy)
+          if (existing) n = { ...n, questions: n.questions.map((x) => (x.id === existing.id ? { ...x, text } : x)) }
+          else {
+            const nq = newQuestion(text, { from: q.id })
+            n = { ...n, questions: n.questions.map((x) => (x.id === q.id ? { ...x, loop: { ...x.loop, supersededBy: nq.id } } : x)).concat(nq) }
+          }
+        }
+      }
+      return advance(n)
+    })
   }
 
-  function back() { if (current > 0) goTo(current - 1) }
+  function goTo(key) { update((b) => visit(b, key)) }
 
+  function back() {
+    update((b) => {
+      const keys = buildSteps(b).filter((s) => b.visited.includes(s.key)).map((s) => s.key)
+      const i = keys.indexOf(b.current)
+      return i > 0 ? visit(b, keys[i - 1]) : b
+    })
+  }
+
+  function rename(qid, text) {
+    update((b) => ({ ...b, questions: b.questions.map((q) => (q.id === qid ? { ...q, text } : q)) }))
+  }
+
+  // ---- render ----
   if (missing) {
     return (
       <main className="page">
@@ -110,10 +186,12 @@ export default function Session({ id }) {
       </main>
     )
   }
-  if (!loaded) return <main className="page"><p className="tm-muted">loading…</p></main>
+  if (!brief) return <main className="page"><p className="tm-muted">loading…</p></main>
 
-  const visible = STEPS.slice(0, Math.min(reached, STEPS.length - 1) + 1)
-  const showBrief = reached >= STEPS.length
+  const steps = buildSteps(brief)
+  const visible = steps.filter((s) => brief.visited.includes(s.key) || s.key === brief.current)
+  const atBrief = brief.current === 'brief'
+  const lastPick = [...visible].reverse().find((s) => s.type === 'pick')
 
   return (
     <main className="page tm">
@@ -126,32 +204,27 @@ export default function Session({ id }) {
 
       <ol className="tm-log">
         {visible.map((step, i) => {
-          const stageStart = i === 0 || STEPS[i - 1].stage !== step.stage
-          const isCurrent = i === current
-          const answered = isAnswered(step, answers)
+          const sectionStart = i === 0 || visible[i - 1].section !== step.section
+          const isCurrent = step.key === brief.current
+          const answered = isAnswered(brief, step)
+          const q = step.section !== 'aim' ? question(brief, step.section) : null
           return (
-            <li key={step.id} className={`tm-entry${isCurrent ? ' current' : ''}`}>
-              {stageStart && <span className="tm-stage">{stageLabel(step.stage)}</span>}
+            <li key={step.key} className={`tm-entry${isCurrent ? ' current' : ''}`}>
+              {sectionStart && (step.section === 'aim'
+                ? <span className="tm-stage">aim</span>
+                : <FocusHeader brief={brief} q={q} renaming={renaming === q.id} onRename={(t) => rename(q.id, t)} onToggleRename={() => setRenaming(renaming === q.id ? null : q.id)} />)}
               {isCurrent ? (
                 <ActiveStep
-                  step={step}
-                  answers={answers}
-                  setAnswer={setAnswer}
-                  helpOpen={helpOpen}
-                  setHelpOpen={setHelpOpen}
-                  hmwStale={hmwStale}
-                  onJump={(sid) => goTo(stepIndex(sid))}
-                  onBack={i > 0 ? back : null}
-                  onNext={next}
-                  isLast={i === STEPS.length - 1}
+                  brief={brief} step={step} q={q}
+                  setValue={setValue} setQuestions={setQuestions} goDirect={goDirect}
+                  pick={pick} addQuestion={addQuestion} stop={stop}
+                  helpOpen={helpOpen} setHelpOpen={setHelpOpen}
+                  onBack={i > 0 ? back : null} onNext={next} goTo={goTo}
                 />
               ) : (
-                <button type="button" className="tm-past" onClick={() => goTo(i)} aria-label={`edit: ${resolve(step.question, answers)}`}>
-                  <span className="tm-past-q">{resolve(step.question, answers)}</span>
-                  <span className={`tm-past-a${answered ? '' : ' open'}`}>
-                    {answered ? displayValue(step, answers) : 'to explore'}
-                    {step.id === 'hmw' && hmwStale && answered && <span className="tm-flag"> · worth a re-read</span>}
-                  </span>
+                <button type="button" className="tm-past" onClick={() => goTo(step.key)} aria-label={`edit: ${step.question}`}>
+                  <span className="tm-past-q">{step.question}</span>
+                  <span className={`tm-past-a${answered ? '' : ' open'}`}>{answered ? displayValue(brief, step) : 'to explore'}</span>
                 </button>
               )}
             </li>
@@ -159,50 +232,79 @@ export default function Session({ id }) {
         })}
       </ol>
 
-      {showBrief && current >= STEPS.length && (
+      {atBrief ? (
         <BriefView
-          answers={answers}
+          brief={brief}
           includeOpen={includeOpen}
           setIncludeOpen={setIncludeOpen}
-          copied={copied}
-          setCopied={setCopied}
-          onBack={() => goTo(STEPS.length - 1)}
+          onContinue={lastPick ? () => goTo(lastPick.key) : null}
           onDone={() => navigate('/tools/thinking')}
         />
-      )}
-      {showBrief && current < STEPS.length && (
-        <button type="button" className="tm-text-btn tm-to-brief" onClick={() => goTo(STEPS.length)}>see the brief ↓</button>
+      ) : (
+        brief.questions.some((q) => q.order > 0) && (
+          <button type="button" className="tm-text-btn tm-to-brief" onClick={() => goTo('brief')}>see the brief so far ↓</button>
+        )
       )}
       <div ref={bottomRef} />
     </main>
   )
 }
 
-function ActiveStep({ step, answers, setAnswer, helpOpen, setHelpOpen, hmwStale, onJump, onBack, onNext, isLast }) {
-  const value = answers[step.id]
-  const question = resolve(step.question, answers)
-  const hint = resolve(step.hint, answers)
-  const help = (step.help || []).map((h) => resolve(h, answers))
-  const onChange = (v) => setAnswer(step.id, v)
+function FocusHeader({ brief, q, renaming, onRename, onToggleRename }) {
+  if (!q) return null
+  const parent = q.from ? question(brief, q.from) : null
+  return (
+    <div className="tm-focus">
+      <span className="tm-focus-label">{q.isAim ? 'working on the aim' : 'focus'}</span>
+      <div className="tm-focus-title">
+        {renaming && !q.isAim
+          ? <input value={q.text} autoFocus aria-label="rename question" onChange={(e) => onRename(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') onToggleRename() }} onBlur={onToggleRename} />
+          : q.text}
+      </div>
+      <div className="tm-focus-meta">
+        <span>{STATES[q.state]}</span>
+        {parent && <span>from: {parent.text}</span>}
+        {!q.isAim && !renaming && <button type="button" onClick={onToggleRename}>refine the wording</button>}
+      </div>
+    </div>
+  )
+}
+
+function ActiveStep({ brief, step, q, setValue, setQuestions, goDirect, pick, addQuestion, stop, helpOpen, setHelpOpen, onBack, onNext, goTo }) {
+  const value = step.path ? getIn(brief, step.path) : undefined
+  const onChange = (v) => setValue(step, v)
+  const label = step.question
 
   let input
   switch (step.type) {
-    case 'choice': input = <ChoiceInput step={step} value={value} onChange={onChange} onContinue={onNext} />; break
+    case 'choice': input = <ChoiceInput options={step.options} value={value} onChange={onChange} label={label} onContinue={onNext} />; break
+    case 'route': input = <RouteInput value={value} onChange={onChange} label={label} onContinue={onNext} />; break
     case 'list': input = <ListInput value={value} onChange={onChange} placeholder={step.placeholder} />; break
-    case 'pair': input = <PairInput step={step} answers={answers} onChangeField={setAnswer} />; break
-    case 'hmw': input = <HmwInput value={value} onChange={onChange} answers={answers} stale={hmwStale} onContinue={onNext} />; break
-    case 'cards': input = <CardsInput value={value} onChange={onChange} />; break
-    case 'select': input = <SelectInput answers={answers} value={value} onChange={onChange} onJump={onJump} />; break
+    case 'pair': input = <PairInput fields={step.fields} values={Object.fromEntries(step.fields.map((f) => [f.key, getIn(brief, f.path)]))} onChangeField={(f, v) => setValue({ ...step, path: f.path, key: `${step.key}.${f.key}` }, v)} />; break
+    case 'hmw': input = <HmwInput value={value} onChange={onChange} template={defaultHmw(brief, q)} onContinue={onNext} />; break
+    case 'cards': input = <CardsInput value={value} onChange={onChange} noun={step.key.endsWith('.options') ? 'option' : 'idea'} />; break
+    case 'select': {
+      const sourceKey = step.key.replace(/\.(selected|choice)$/, step.key.endsWith('.choice') ? '.options' : '.ideas')
+      input = <SelectInput items={getIn(brief, step.from)} value={value} onChange={onChange} emptyText="Nothing to choose from yet." onEmptyAction={() => goTo(sourceKey)} emptyActionLabel="Add some first" />
+      break
+    }
     case 'tasks': input = <TasksInput value={value} onChange={onChange} />; break
-    default: input = <TextInput step={step} value={value} onChange={onChange} onContinue={onNext} />
+    case 'log': input = <LogInput value={value} onChange={onChange} />; break
+    case 'questions': input = <QuestionsInput questions={brief.questions.filter((x) => !x.isAim && !x.from)} onChange={setQuestions} onDirect={goDirect} />; break
+    case 'pick': input = <PickInput brief={brief} value={value} onPick={(c) => pick(step, c)} onAdd={(t) => addQuestion(step, t)} onStop={() => stop(step)} allowStop={step.allowStop} />; break
+    default: input = <TextInput value={value} onChange={onChange} label={label} onContinue={onNext} />
   }
 
-  const answered = isAnswered(step, answers)
+  const answered = isAnswered(brief, step)
+  const help = step.help || []
+  const isPick = step.type === 'pick'
+  const isDirect = step.type === 'questions' && brief.aim.discovery === 'direct'
   return (
     <div className="tm-active">
-      <h2 className="tm-q" id={`q-${step.id}`}>{question}</h2>
-      {hint && <p className="tm-hint">{hint}</p>}
-      <div className="tm-answer" aria-labelledby={`q-${step.id}`}>{input}</div>
+      <h2 className="tm-q" id={`q-${step.key}`}>{step.question}</h2>
+      {step.hint && <p className="tm-hint">{step.hint}</p>}
+      <div className="tm-answer" aria-labelledby={`q-${step.key}`}>{input}</div>
       {step.example && <p className="tm-example">e.g. {step.example}</p>}
       {(help.length > 0 || step.why) && (
         <div className="tm-help">
@@ -219,30 +321,30 @@ function ActiveStep({ step, answers, setAnswer, helpOpen, setHelpOpen, hmwStale,
       )}
       <div className="tm-controls">
         {onBack && <button type="button" className="tm-btn" onClick={onBack}>back</button>}
-        <button type="button" className="tm-btn primary" onClick={onNext}>
-          {isLast ? 'finish' : answered ? 'continue' : 'come back to this'}
-        </button>
+        {!isPick && !isDirect && (
+          <button type="button" className="tm-btn primary" onClick={onNext}>{answered ? 'continue' : 'come back to this'}</button>
+        )}
+        {isDirect && <button type="button" className="tm-btn primary" onClick={goDirect}>continue</button>}
         {(step.type === 'text' || step.type === 'hmw') && <span className="tm-kbd">enter to continue · shift+enter for a new line</span>}
       </div>
     </div>
   )
 }
 
-function BriefView({ answers, includeOpen, setIncludeOpen, copied, setCopied, onBack, onDone }) {
-  const md = buildBrief(answers, { includeOpen })
-  const title = sessionTitle(answers)
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'brief'
+function BriefView({ brief, includeOpen, setIncludeOpen, onContinue, onDone }) {
+  const [copied, setCopied] = useState(false)
+  const md = buildBrief(brief, { includeOpen })
+  const slug = briefTitle(brief).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'brief'
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(md)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch { /* clipboard unavailable: user can select the text */ }
+    } catch { /* clipboard unavailable: the text can be selected */ }
   }
   function download(ext) {
-    const body = ext === 'md' ? md : briefToText(md)
-    const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }))
+    const url = URL.createObjectURL(new Blob([ext === 'md' ? md : briefToText(md)], { type: 'text/plain' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `${slug}.${ext}`
@@ -263,7 +365,7 @@ function BriefView({ answers, includeOpen, setIncludeOpen, copied, setCopied, on
           <button type="button" className="tm-btn" onClick={copy}>{copied ? 'copied' : 'copy'}</button>
           <button type="button" className="tm-btn" onClick={() => download('md')}>download .md</button>
           <button type="button" className="tm-btn" onClick={() => download('txt')}>download .txt</button>
-          <button type="button" className="tm-text-btn" onClick={onBack}>edit answers</button>
+          {onContinue && <button type="button" className="tm-text-btn" onClick={onContinue}>keep working</button>}
           <button type="button" className="tm-text-btn" onClick={onDone}>done</button>
         </div>
       </div>
@@ -271,19 +373,21 @@ function BriefView({ answers, includeOpen, setIncludeOpen, copied, setCopied, on
   )
 }
 
-/** Tiny renderer for the brief's own markdown: headings, bullets, bold, "To explore". */
+/** Tiny renderer for the brief's own markdown: headings, bullets, bold, italics, "To explore". */
 function renderMarkdown(md) {
   const out = []
   let list = null
-  const inline = (t) => t.split(/(\*\*[^*]+\*\*|_To explore_)/).map((part, i) => {
+  const inline = (t) => t.split(/(\*\*[^*]+\*\*|_[^_]+_)/).map((part, i) => {
     if (part.startsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>
     if (part === '_To explore_') return <em key={i} className="tm-open">To explore</em>
+    if (part.startsWith('_') && part.endsWith('_') && part.length > 2) return <em key={i} className="tm-open">{part.slice(1, -1)}</em>
     return part
   })
   const flush = () => { if (list) { out.push(<ul key={out.length}>{list}</ul>); list = null } }
   md.split('\n').forEach((line, i) => {
     if (line.startsWith('# ')) { flush(); out.push(<h2 key={i} className="article-heading">{line.slice(2)}</h2>) }
     else if (line.startsWith('## ')) { flush(); out.push(<h3 key={i}>{line.slice(3)}</h3>) }
+    else if (line.startsWith('### ')) { flush(); out.push(<h4 key={i}>{line.slice(4)}</h4>) }
     else if (line.startsWith('- ')) { list = list || []; list.push(<li key={i}>{inline(line.slice(2))}</li>) }
     else if (line.trim()) { flush(); out.push(<p key={i}>{inline(line)}</p>) }
     else flush()

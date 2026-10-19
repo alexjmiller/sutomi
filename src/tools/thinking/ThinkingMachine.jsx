@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { listBriefs, createBrief, deleteBrief } from './api'
-import { emptyAnswers, sessionTitle } from './flow'
+import { emptyBrief, briefTitle, inProgress, openQuestions } from './flow'
 import Session from './Session'
 import './thinking.css'
 
@@ -10,6 +10,8 @@ export default function ThinkingMachine() {
   const { id } = useParams()
   return id ? <Session key={id} id={id} /> : <BriefList />
 }
+
+const titleOf = (b) => (b.version === 2 ? briefTitle(b) : (b.answers?.idea || 'untitled thinking'))
 
 function BriefList() {
   const [briefs, setBriefs] = useState(null)
@@ -23,7 +25,7 @@ function BriefList() {
 
   async function start() {
     try {
-      const b = await createBrief({ answers: emptyAnswers(), step: 'start' })
+      const b = await createBrief(emptyBrief())
       navigate(`/tools/thinking/${b.id}`)
     } catch {
       setError("couldn't start a new brief")
@@ -31,8 +33,7 @@ function BriefList() {
   }
 
   async function remove(b) {
-    const title = sessionTitle(b.answers)
-    if (!window.confirm(`Delete "${title}"? This can't be undone.`)) return
+    if (!window.confirm(`Delete "${titleOf(b)}"? This can't be undone.`)) return
     await deleteBrief(b.id)
     refresh()
   }
@@ -41,7 +42,7 @@ function BriefList() {
     <main className="page tm">
       <Link to="/dashboard" className="back-link">&lt; back</Link>
       <h1 className="article-heading">Thinking machine</h1>
-      <p className="tm-intro">a few questions, one at a time, to turn a rough idea or problem into an outcome, some ideas, and a small test</p>
+      <p className="tm-intro">a few questions, one at a time, to turn a rough aim into the smaller questions behind it, work on one, and carry what you learn back to the aim</p>
 
       <button type="button" className="new-article-btn" onClick={start}>what do you want to work on?</button>
       {error && <p className="login-error">{error}</p>}
@@ -50,13 +51,19 @@ function BriefList() {
         <>
           <h2 className="tm-list-heading">saved briefs</h2>
           <ul className="manage-list">
-            {briefs.map((b) => (
-              <li key={b.id} className="manage-item">
-                <Link to={`/tools/thinking/${b.id}`} className="manage-article-name">{sessionTitle(b.answers)}</Link>
-                <span className="tm-muted">{new Date(b.updatedAt).toLocaleDateString('en-GB')}</span>
-                <button type="button" className="manage-status draft" onClick={() => remove(b)}>delete</button>
-              </li>
-            ))}
+            {briefs.map((b) => {
+              const active = b.version === 2 ? inProgress(b) : []
+              const open = b.version === 2 ? openQuestions(b).length : 0
+              return (
+                <li key={b.id} className="manage-item tm-list-sub">
+                  <Link to={`/tools/thinking/${b.id}`} className="manage-article-name">{titleOf(b)}</Link>
+                  <span className="tm-muted">{new Date(b.updatedAt).toLocaleDateString('en-GB')}</span>
+                  {active.length > 0 && <span className="tm-waiting">in progress: {active.map((q) => (q.isAim ? 'the aim' : q.text)).join(', ')}</span>}
+                  {open > 0 && <span className="tm-muted">{open} to explore</span>}
+                  <button type="button" className="manage-status draft" onClick={() => remove(b)}>delete</button>
+                </li>
+              )
+            })}
           </ul>
         </>
       )}

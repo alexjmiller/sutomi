@@ -26,7 +26,7 @@ The Vite dev server proxies `/api` requests to the Express backend.
 Logged-in tools live under `src/tools/<name>/` as self-contained modules (component, logic, CSS) routed at `/tools/<name>`.
 
 - **QR Creator** (`/tools/qr`) — turn a URL, text, or `lat,lon` into a QR code, download as SVG or PNG. Generated entirely in the browser.
-- **Thinking Machine** (`/tools/thinking`) — a guided sequence of questions (understand, define, explore, test) that turns a rough idea or problem into an outcome, ideas, a selected idea and a small test, then assembles a brief in your own words to copy or download. No AI: the questions live in `src/tools/thinking/flow.js`; briefs are saved server-side.
+- **Thinking Machine** (`/tools/thinking`) — a guided, non-AI sequence of questions: state an aim, uncover the smaller questions behind it, work on one at a time (clarify, find out, explore options, decide, test, or do), record what you learn and what it means for the aim, then export a brief in your own words. Questions live in `src/tools/thinking/flow.js`; briefs are saved server-side.
 
 ## Deployment
 
