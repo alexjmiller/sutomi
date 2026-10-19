@@ -449,7 +449,7 @@ function ChainEditor({ inst, onChange }) {
           <li key={r.key || `custom-${i}`} className={`eh-step${r.kept ? '' : ' dropped'}${r.custom ? ' custom' : ''}`}>
             <input type="checkbox" checked={r.kept} disabled={!onChange} aria-label={`keep: ${r.title || 'new step'}`} onChange={(e) => set(i, { kept: e.target.checked })} />
             <StepDate value={r.date} disabled={!onChange || !r.kept} onChange={(date) => set(i, { date })} />
-            <input className="eh-step-title" value={r.title} disabled={!onChange || !r.kept} placeholder="what needs doing" aria-label="step" onChange={(e) => set(i, { title: e.target.value })} />
+            <StepTitle value={r.title} disabled={!onChange || !r.kept} startOpen={r.custom && !r.title} onChange={(title) => set(i, { title })} />
             {r.custom && onChange && (
               <label className="eh-step-once"><input type="checkbox" checked={r.once} onChange={(e) => set(i, { once: e.target.checked })} /> just this time</label>
             )}
@@ -461,6 +461,32 @@ function ChainEditor({ inst, onChange }) {
       )}
       {!onChange && <span className="eh-muted">{kept} step{kept === 1 ? '' : 's'}</span>}
     </div>
+  )
+}
+
+/** A step's title: wrapped text that becomes a box when clicked (a narrow panel can't show a long title in an input). */
+function StepTitle({ value, disabled, startOpen, onChange }) {
+  const [editing, setEditing] = useState(Boolean(startOpen))
+  const ref = useRef(null)
+  useEffect(() => { if (editing) ref.current?.focus() }, [editing])
+  if (editing && !disabled) {
+    return (
+      <input
+        ref={ref}
+        className="eh-step-title"
+        value={value}
+        placeholder="what needs doing"
+        aria-label="step"
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); setEditing(false) } }}
+      />
+    )
+  }
+  return (
+    <button type="button" className="eh-step-text" disabled={disabled} title={disabled ? undefined : 'click to retitle'} onClick={() => setEditing(true)}>
+      {value || <span className="eh-muted">what needs doing</span>}
+    </button>
   )
 }
 

@@ -1071,8 +1071,29 @@ button.eh-cell {
   border-bottom-color: #46413d;
 }
 
-.eh-step-title:disabled {
+.eh-step-text {
+  flex-basis: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 0 0 26px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  font: inherit;
+  font-size: 15px;
   color: #46413d;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.3;
+  cursor: text;
+}
+
+.eh-step-text:not(:disabled):hover {
+  border-bottom-color: #46413d;
+}
+
+.eh-step-text:disabled {
+  cursor: default;
 }
 
 .eh-step-once {
