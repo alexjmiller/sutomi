@@ -651,6 +651,112 @@ button.eh-cell {
   opacity: 0.7;
 }
 
+/* Space bar */
+.eh-space {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.eh-space-dot {
+  color: #2e7d32;
+  margin-right: 6px;
+}
+
+.eh-space.test {
+  padding: 6px 10px;
+  border: 2px solid #c98a00;
+  background: rgba(249, 207, 66, 0.25);
+  display: inline-block;
+}
+
+.eh-space.test .eh-space-dot {
+  color: #c98a00;
+}
+
+.eh-space-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.eh-space-pick {
+  display: flex;
+  gap: 12px;
+}
+
+.eh-space-pick .eh-tab:disabled {
+  opacity: 0.3;
+  cursor: default;
+  text-decoration: none;
+}
+
+/* Background bands (periods) and non-blocking items */
+.eh-cell.in-term {
+  background: rgba(70, 65, 61, 0.05);
+}
+
+.eh-cell.in-holiday {
+  background: rgba(249, 207, 66, 0.18);
+}
+
+.eh-band {
+  font-size: 12px;
+  line-height: 1.3;
+  min-height: 15px;
+  margin: 0 -4px 2px;
+  padding: 0 6px;
+  background: rgba(70, 65, 61, 0.12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.eh-band.holiday {
+  background: rgba(249, 207, 66, 0.5);
+}
+
+.eh-daybtn {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.eh-daybtn:hover {
+  text-decoration: underline;
+}
+
+.eh-day-group {
+  margin-top: 12px;
+}
+
+.eh-day-group .eh-h {
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 6px;
+}
+
+.eh-band-row {
+  font-size: 16px;
+  opacity: 0.75;
+  padding: 2px 0 2px 11px;
+  border-left: 3px solid rgba(70, 65, 61, 0.3);
+}
+
+.eh-chip.transparent .eh-chip-title,
+.eh-row-item.transparent .eh-row-title {
+  font-style: italic;
+  opacity: 0.7;
+}
+
 /* Agenda */
 .eh-day {
   margin-bottom: 20px;

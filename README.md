@@ -41,5 +41,6 @@ ssh dedibox "cd /data/sutomi && docker compose up -d --build"
 | Variable | Description |
 |---|---|
 | `SUTOMI_PASSWORD` | Password for login and article management |
-| `EVENTHORIZON_API_TOKEN` | Bearer token for the Event Horizon services (proxied by `server/eventhorizon.js`; optional, the tool just reports the services as unreachable without it) |
+| `EVENTHORIZON_API_TOKEN` | Bearer token for the Event Horizon services, Default space (proxied by `server/eventhorizon.js`; optional, the tool just reports the services as unreachable without it) |
+| `EVENTHORIZON_TEST_TOKEN` | Token for the Event Horizon Test space (optional; the Test option is disabled without it) |
 | `PORT` | Server port (default: 3000) |

@@ -14,6 +14,19 @@ export function nodeId(tags = []) {
   return null
 }
 export const isChainTask = (item) => Boolean(item.tags?.includes('ehn:task'))
+export const hasTag = (item, tag) => Boolean(item.tags?.includes(tag))
+/** Background bands (school terms and the like): drawn across days, never listed. */
+export const isBand = (item) => hasTag(item, 'period')
+export const isBankHoliday = (item) => hasTag(item, 'bank-holiday')
+/** Non-blocking: never a conflict. */
+export const isTransparent = (item) => hasTag(item, 'transparent')
+/** A birthday occurrence whose series start may be the date of birth (own, or an ontology anchor). */
+export const isBirthday = (item) => hasTag(item, 'birthday') && !item.is_task && !isChainTask(item)
+/** Age on this occurrence, or null when the birth year is unknown (start year is this year or later). */
+export function ageOn(item, birthYear, now = DateTime.now()) {
+  if (birthYear == null || birthYear >= now.year) return null
+  return startOf(item).year - birthYear
+}
 export const isAnchor = (item) => Boolean(instanceTag(item.tags)) && !isChainTask(item)
 
 // Time rules: all-day items live on their UTC date and are never shifted into the viewer's zone;

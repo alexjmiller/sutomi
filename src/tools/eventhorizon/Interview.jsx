@@ -5,35 +5,46 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from './api'
 import { fmtIsoDate, spellIso } from './time'
+import { SpaceBar } from './SpaceBar'
 
+// Sessions are keyed by space so an interview begun in Test can't be committed into Default.
 const PREFIX = 'eh_interview:'
+const key = (space, id) => `${PREFIX}${space}:${id}`
 
-export function loadSession(id) {
+export function loadSession(space, id) {
   try {
-    const s = localStorage.getItem(PREFIX + id)
+    const s = localStorage.getItem(key(space, id)) || (space === 'default' ? localStorage.getItem(PREFIX + id) : null) // pre-space key
     return s ? JSON.parse(s) : null
   } catch {
     return null
   }
 }
-function saveSession(id, s) {
-  try { localStorage.setItem(PREFIX + id, JSON.stringify(s)) } catch { /* private window etc. */ }
+function saveSession(space, id, s) {
+  try { localStorage.setItem(key(space, id), JSON.stringify(s)) } catch { /* private window etc. */ }
 }
-export function clearSession(id) {
-  try { localStorage.removeItem(PREFIX + id) } catch { /* ignore */ }
+export function clearSession(space, id) {
+  try {
+    localStorage.removeItem(key(space, id))
+    if (space === 'default') localStorage.removeItem(PREFIX + id)
+  } catch { /* ignore */ }
 }
-export function savedSessions() {
+export function savedSessions(space) {
   const out = []
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
       if (!k.startsWith(PREFIX)) continue
+      const rest = k.slice(PREFIX.length)
+      const [sp, id] = rest.includes(':') ? rest.split(/:(.*)/) : ['default', rest]
+      if (sp !== space) continue
       const s = JSON.parse(localStorage.getItem(k))
-      if (s && !s.results) out.push({ id: k.slice(PREFIX.length), kind: s.kind, name: s.name, instances: s.instances?.length || 0 })
+      if (s && !s.results) out.push({ id, kind: s.kind, name: s.name, instances: s.instances?.length || 0 })
     }
   } catch { /* ignore */ }
   return out
 }
+
+const stepsText = (i) => (i.steps ? `${i.steps} step${i.steps === 1 ? '' : 's'}` : 'no tasks')
 
 /** Transcript entries for a new question: section divider, node helper, then the question. */
 function contextEntries(prev, q, kind) {
@@ -61,7 +72,8 @@ function useWide(px = 900) {
 }
 
 export default function Interview({ kind, id }) {
-  const [resumable, setResumable] = useState(() => loadSession(id))
+  const [space] = useState(() => api.getSpace())
+  const [resumable, setResumable] = useState(() => loadSession(space, id))
   const [session, setSession] = useState(null)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState(null)
@@ -80,8 +92,8 @@ export default function Interview({ kind, id }) {
 
   function apply(s) {
     setSession(s)
-    if (s.results) clearSession(id)
-    else saveSession(id, s)
+    if (s.results) clearSession(space, id)
+    else saveSession(space, id, s)
   }
 
   async function start() {
@@ -155,7 +167,7 @@ export default function Interview({ kind, id }) {
   }
 
   function restart() {
-    clearSession(id)
+    clearSession(space, id)
     setResumable(null)
     setSession(null)
     setDismissed(new Set())
@@ -171,6 +183,7 @@ export default function Interview({ kind, id }) {
         <Link to="/tools/eventhorizon" className="back-link">&lt; event horizon</Link>
         {session && !session.results && <button type="button" className="eh-text-btn" onClick={restart}>start again</button>}
       </div>
+      <SpaceBar space={space} />
 
       {resumable && !session ? (
         <section className="eh-chat">
@@ -295,7 +308,7 @@ function AnswerInput({ question: q, onSend }) {
           type={q.kind === 'number' ? 'text' : 'text'}
           inputMode={q.kind === 'number' ? 'decimal' : 'text'}
           value={text}
-          placeholder={q.default != null ? showDefault(q) : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
+          placeholder={q.default != null ? showDefault(q) : q.person ? "a name — or 'me'" : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
           aria-label={q.prompt}
           onChange={(e) => setText(e.target.value)}
         />
@@ -312,6 +325,7 @@ function AnswerInput({ question: q, onSend }) {
       {q.help && <p className="eh-help">{q.help}</p>}
       <p className="eh-kbd">
         {q.kind === 'date' && 'dates can be "3 March 2027", "03/03/2027" or "2027-03-03"'}
+        {q.person && "type a name, or 'me' for yourself"}
         {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {showDefault(q)}</button></>}
         {!q.required && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>skip</button></>}
       </p>
@@ -331,7 +345,7 @@ function MapPanel({ instances, lastAdded }) {
           <li key={`${i.title}|${i.anchorDate}|${k}`} className={`eh-card${i.title === lastAdded ? ' new' : ''}`}>
             <strong>{i.title}</strong>
             <span>{fmtIsoDate(i.anchorDate)}</span>
-            <span className="eh-muted">{i.steps} step{i.steps === 1 ? '' : 's'} · first on {fmtIsoDate(i.firstStep)}</span>
+            <span className="eh-muted">{i.steps ? `${stepsText(i)} · first on ${fmtIsoDate(i.firstStep)}` : 'no tasks'}</span>
           </li>
         ))}
       </ul>
@@ -364,7 +378,7 @@ function Review({ instances, busy, onCommit }) {
           <li key={k}>
             <label>
               <input type="checkbox" checked={!dropped.has(k)} onChange={() => toggle(k)} />
-              <span><strong>{i.title}</strong> — {fmtIsoDate(i.anchorDate)} · {i.steps} step{i.steps === 1 ? '' : 's'}</span>
+              <span><strong>{i.title}</strong> — {fmtIsoDate(i.anchorDate)} · {stepsText(i)}</span>
             </label>
           </li>
         ))}

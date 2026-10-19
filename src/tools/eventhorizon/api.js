@@ -1,10 +1,26 @@
 // Event Horizon — API client. Everything goes through sutomi's proxy (/api/eh) behind login.
+// The chosen space (Default = the real map, Test = a sandbox) travels as a header; the proxy
+// turns it into the right token.
 const API = '/api/eh'
+const SPACE_KEY = 'eh_space'
+export const SPACES = ['default', 'test']
+
+export function getSpace() {
+  try {
+    const s = localStorage.getItem(SPACE_KEY)
+    return SPACES.includes(s) ? s : 'default'
+  } catch {
+    return 'default'
+  }
+}
+export function setSpace(space) {
+  try { localStorage.setItem(SPACE_KEY, space) } catch { /* ignore */ }
+}
 
 function authHeaders() {
   const user = sessionStorage.getItem('sutomi_user')
   const token = user ? JSON.parse(user).token : ''
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-EH-Space': getSpace() }
 }
 
 async function request(path, options = {}) {
@@ -19,6 +35,7 @@ async function request(path, options = {}) {
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) })
 
 export const health = () => request('/health')
+export const whoami = () => request('/whoami')
 
 // Interview service
 export const getScripts = () => request('/interview/scripts')

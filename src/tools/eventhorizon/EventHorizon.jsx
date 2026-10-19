@@ -6,6 +6,7 @@ import * as api from './api'
 import { CATEGORIES } from './time'
 import Interview, { savedSessions } from './Interview'
 import Calendar from './Calendar'
+import { SpaceBar, SPACE_LABEL } from './SpaceBar'
 import './eventhorizon.css'
 
 export default function EventHorizon() {
@@ -27,14 +28,26 @@ function InterviewRoute({ kind }) {
 }
 
 function Home() {
+  const [space, setSpaceState] = useState(() => api.getSpace())
   const [health, setHealth] = useState(null)
+  const [who, setWho] = useState(null)
   const [live, setLive] = useState(null)
-  const [saved] = useState(() => savedSessions())
+  const [saved, setSaved] = useState(() => savedSessions(space))
 
   useEffect(() => {
-    api.health().then(setHealth).catch(() => setHealth({ interview: 'unreachable', substrate: 'unreachable' }))
-    api.listInstances().then((r) => setLive(r.items.length)).catch(() => setLive(null))
-  }, [])
+    let on = true
+    setHealth(null); setWho(null); setLive(null)
+    setSaved(savedSessions(space))
+    api.health().then((h) => on && setHealth(h)).catch(() => on && setHealth({ interview: 'unreachable', substrate: 'unreachable' }))
+    api.whoami().then((w) => on && setWho(w)).catch(() => {})
+    api.listInstances().then((r) => on && setLive(r.items.length)).catch(() => on && setLive(null))
+    return () => { on = false }
+  }, [space])
+
+  function chooseSpace(s) {
+    api.setSpace(s)
+    setSpaceState(s)
+  }
 
   const down = health && [health.interview !== 'ok' && 'the interview service', health.substrate !== 'ok' && 'the calendar service'].filter(Boolean)
 
@@ -45,6 +58,17 @@ function Home() {
         Your life as a map of predictable future events, each with its preparation chain.
         Say what's coming; it works out what needs doing, and when.
       </p>
+      <div className="eh-space-row">
+        <SpaceBar space={space} who={who} />
+        <div className="eh-space-pick" role="radiogroup" aria-label="space">
+          {['default', 'test'].map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={space === s} className={`eh-tab${space === s ? ' active' : ''}`}
+              disabled={health?.spaces && !health.spaces.includes(s)} onClick={() => chooseSpace(s)}>
+              {SPACE_LABEL[s].replace(' space', '')}
+            </button>
+          ))}
+        </div>
+      </div>
       {down && down.length > 0 && (
         <p className="eh-problem">Can't reach {down.join(' or ')} right now ({[health.interview, health.substrate].filter((s) => s !== 'ok').join(', ')}).</p>
       )}
@@ -102,6 +126,7 @@ function Library({ mode }) {
   return (
     <main className="page eh">
       <Link to="/tools/eventhorizon" className="back-link">&lt; event horizon</Link>
+      <SpaceBar space={api.getSpace()} />
       <p className="eh-intro">
         {disruption
           ? 'Something has changed. Pick what has happened and we will work out the next two weeks and the next three months, one step at a time.'
