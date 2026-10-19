@@ -2,6 +2,7 @@ import express from 'express'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { thinkingRouter } from './server/thinking.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -131,6 +132,9 @@ app.post('/api/login', (req, res) => {
     res.status(401).json({ error: 'wrong password' })
   }
 })
+
+// Tools (auth): Thinking Machine briefs
+app.use('/api/thinking', auth, thinkingRouter(join(__dirname, 'data', 'thinking.json')))
 
 // SPA fallback
 app.get('/{*splat}', (_req, res) => {

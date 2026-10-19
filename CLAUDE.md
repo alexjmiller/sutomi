@@ -26,6 +26,7 @@ Personal website for Alexander Miller. React + Express, deployed via Docker on d
 - Auth uses Bearer token (SUTOMI_PASSWORD env var), session stored in sessionStorage
 - **Dashboard tools are modular:** each lives in its own folder under `src/tools/<name>/` (page component + pure logic + its own CSS), is routed at `/tools/<name>` in `App.jsx` (logged in only), and is linked from the `tools` array in `Dashboard.jsx`. Add new tools the same way; keep them self-contained and avoid touching `App.css`
 - QR Creator (`src/tools/qr/`) generates codes client-side with the `qrcode` npm package — no server endpoint, nothing leaves the browser. Logic ported from `~/Projects/qr-creator` (Python); preview is brown-on-cream, downloads are black-on-white SVG/PNG
+- Thinking Machine (`src/tools/thinking/`) is **deliberately non-AI** in v1: a fixed sequence of questions in four stages (understand → define → explore → test) rendered as a plain running conversation — past Q&As stay visible above and are clickable to edit, the current question sits at the bottom, the brief appears at the end. All questions, hints, examples, help prompts and branching live in `flow.js`; tweak the process there, not in the components. Answers are structured data saved server-side via `server/thinking.js` (`data/thinking.json`, autosave with retry). Never rewrite or interpret the user's words; skipped steps show as "To explore". AI guidance was considered and parked for a later iteration
 
 ## Deployment
 ```bash
@@ -44,6 +45,7 @@ rsync -av src/pages/Home.jsx dedibox:/data/sutomi/src/pages/Home.jsx
 - `/dashboard` — Tools dashboard (logged in only)
 - `/articles` — Manage articles with rich editor (logged in only)
 - `/tools/qr` — QR Creator: url / text / geo to SVG or PNG (logged in only)
+- `/tools/thinking` — Thinking Machine: list of saved briefs; `/tools/thinking/:id` one brief as a conversation (logged in only)
 
 ## API
 - `GET /api/welcome` — welcome message
@@ -53,6 +55,7 @@ rsync -av src/pages/Home.jsx dedibox:/data/sutomi/src/pages/Home.jsx
 - `PUT /api/articles/:id` — update article, re-slugs on title change (auth)
 - `DELETE /api/articles/:id` — delete article (auth)
 - `POST /api/login` — authenticate
+- `GET|POST /api/thinking`, `GET|PUT|DELETE /api/thinking/:id` — Thinking Machine briefs (auth), router in `server/thinking.js`
 
 ## GitHub
 - Repo: github.com/alexjmiller/sutomi (private)

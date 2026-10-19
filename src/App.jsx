@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ManageArticles from './pages/ManageArticles'
 import QrCreator from './tools/qr/QrCreator'
+import ThinkingMachine from './tools/thinking/ThinkingMachine'
 import './App.css'
 
 export default function App() {
@@ -36,6 +37,8 @@ export default function App() {
           <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
           <Route path="/articles" element={user ? <ManageArticles /> : <Navigate to="/login" />} />
           <Route path="/tools/qr" element={user ? <QrCreator /> : <Navigate to="/login" />} />
+          <Route path="/tools/thinking" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
+          <Route path="/tools/thinking/:id" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
         </Routes>
         <Footer />
       </div>

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local tool data (thinking machine briefs)
+data/thinking.json
