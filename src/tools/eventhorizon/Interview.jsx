@@ -440,10 +440,11 @@ function MapPanel({ instances, deferred, lastAdded, onEdit }) {
 function ChainEditor({ inst, onChange }) {
   const rows = rowsOf(inst)
   const set = (i, patch) => onChange(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)))
-  if (!rows.length) return <span className="eh-muted">no tasks</span>
+  if (!rows.length && !onChange) return <span className="eh-muted">no tasks</span>
   const kept = rows.filter(rowComplete).length
   return (
     <div className="eh-steps-wrap">
+      {!rows.length && <span className="eh-muted">no tasks yet — add your own below</span>}
       <ul className="eh-steps">
         {rows.map((r, i) => (
           <li key={r.key || `custom-${i}`} className={`eh-step${r.kept ? '' : ' dropped'}${r.custom ? ' custom' : ''}`}>
