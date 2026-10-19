@@ -8,6 +8,9 @@ services:
       - NODE_ENV=production
       - SUTOMI_PASSWORD=${SUTOMI_PASSWORD:?set SUTOMI_PASSWORD in .env}
       - EVENTHORIZON_API_TOKEN=${EVENTHORIZON_API_TOKEN:-}
+      # Event Horizon containers share the proxy network; talk to them directly rather than via Cloudflare
+      - EH_API_URL=http://eventhorizon-api:3000
+      - EH_INTERVIEW_URL=http://eventhorizon-interview:3000
     volumes:
       - sutomi-data:/app/data
     networks:
