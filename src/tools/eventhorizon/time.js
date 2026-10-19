@@ -31,6 +31,8 @@ export const fmtShortDay = (dt) => gb(dt).toFormat('ccc d LLL')
 export const fmtTime = (dt) => gb(dt).toFormat('HH:mm')
 export const fmtMonth = (dt) => gb(dt).toFormat('LLLL yyyy')
 export const fmtIsoDate = (iso) => (iso ? fmtDay(DateTime.fromISO(iso)) : '')
+/** "26 March 2026" — the spelled form the interview service reads back without ambiguity. */
+export const spellIso = (iso) => (iso ? gb(DateTime.fromISO(iso)).toFormat('d MMMM yyyy') : '')
 
 /** "Tue 3 Mar 2027", "Sat 20 Dec 2026 – Fri 2 Jan 2027" or "Tue 3 Mar 2027, 10:00–11:30". */
 export function whenText(item) {

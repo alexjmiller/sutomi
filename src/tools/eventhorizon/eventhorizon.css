@@ -138,8 +138,7 @@
   opacity: 1;
 }
 
-.eh-input,
-.eh-date {
+.eh-input {
   flex: 1;
   min-width: 0;
   padding: 8px 12px;
@@ -148,15 +147,21 @@
   outline: none;
 }
 
-.eh-date {
-  flex: 0 0 auto;
-  width: 44px;
-  padding: 6px;
-  color: transparent;
+/* Rendered (so showPicker works) but out of sight: the "pick" button opens it. */
+.eh-date-hidden {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.eh-input:focus-visible,
-.eh-date:focus-visible {
+.eh-input:focus-visible {
   border-color: #d4532b;
 }
 
@@ -168,6 +173,7 @@
 }
 
 .eh-row {
+  position: relative;
   display: flex;
   gap: 8px;
   align-items: stretch;

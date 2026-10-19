@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from './api'
-import { fmtIsoDate } from './time'
+import { fmtIsoDate, spellIso } from './time'
 
 const PREFIX = 'eh_interview:'
 
@@ -114,7 +114,7 @@ export default function Interview({ kind, id }) {
     const q = session.question
     try {
       const turn = await api.answer(session.state, input)
-      const shown = input.trim() ? input.trim() : (q.default ?? 'skip')
+      const shown = input.trim() ? input.trim() : (q.default == null ? 'skip' : showDefault(q))
       const transcript = [...session.transcript, { kind: 'a', text: shown }]
       let instances = session.instances
       let lastAdded = session.lastAdded
@@ -246,10 +246,19 @@ function Transcript({ entries, dismissed, onDismiss }) {
   )
 }
 
+/** Defaults arrive as YYYY-MM-DD; show dates the way we'd say them. */
+const showDefault = (q) => (q.kind === 'date' ? spellIso(q.default) : q.default)
+
 /** Input shaped by the question kind. Sends the text as typed; the service does the parsing. */
 function AnswerInput({ question: q, onSend }) {
   const [text, setText] = useState('')
   const ref = useRef(null)
+  const dateRef = useRef(null)
+  const openPicker = () => {
+    const el = dateRef.current
+    if (!el) return
+    try { el.showPicker() } catch { el.click() }
+  }
   useEffect(() => { ref.current?.focus() }, [])
   const canSkip = !q.required || q.default != null
   const submit = (e) => {
@@ -286,12 +295,15 @@ function AnswerInput({ question: q, onSend }) {
           type={q.kind === 'number' ? 'text' : 'text'}
           inputMode={q.kind === 'number' ? 'decimal' : 'text'}
           value={text}
-          placeholder={q.default != null ? q.default : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
+          placeholder={q.default != null ? showDefault(q) : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
           aria-label={q.prompt}
           onChange={(e) => setText(e.target.value)}
         />
         {q.kind === 'date' && (
-          <input className="eh-date" type="date" aria-label="pick a date" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ''} onChange={(e) => setText(e.target.value)} />
+          <>
+            <input ref={dateRef} className="eh-date-hidden" type="date" tabIndex={-1} aria-hidden="true" onChange={(e) => e.target.value && setText(spellIso(e.target.value))} />
+            <button type="button" className="eh-btn" onClick={openPicker}>pick</button>
+          </>
         )}
         <button type="submit" className="eh-btn primary" disabled={!text.trim() && !canSkip}>
           {!text.trim() && q.default != null ? 'use this' : !text.trim() && canSkip ? 'skip' : 'send'}
@@ -300,7 +312,7 @@ function AnswerInput({ question: q, onSend }) {
       {q.help && <p className="eh-help">{q.help}</p>}
       <p className="eh-kbd">
         {q.kind === 'date' && 'dates can be "3 March 2027", "03/03/2027" or "2027-03-03"'}
-        {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {q.default}</button></>}
+        {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {showDefault(q)}</button></>}
         {!q.required && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>skip</button></>}
       </p>
     </form>
