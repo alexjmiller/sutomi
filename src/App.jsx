@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ManageArticles from './pages/ManageArticles'
+import QrCreator from './tools/qr/QrCreator'
 import './App.css'
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} />
           <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
           <Route path="/articles" element={user ? <ManageArticles /> : <Navigate to="/login" />} />
+          <Route path="/tools/qr" element={user ? <QrCreator /> : <Navigate to="/login" />} />
         </Routes>
         <Footer />
       </div>

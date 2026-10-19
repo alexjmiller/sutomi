@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 const tools = [
   { name: 'Edit articles', description: 'write about the future and the past', path: '/articles' },
-  { name: 'QR Creator', description: 'create a quick qr code' },
+  { name: 'QR Creator', description: 'create a quick qr code', path: '/tools/qr' },
   { name: 'Thinking machine', description: 'guided thinking - problem framing & hypothesis testing' },
   { name: 'projects', description: 'manage and view my projects' },
   { name: 'tasks', description: 'create tasklists' },

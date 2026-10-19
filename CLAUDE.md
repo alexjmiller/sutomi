@@ -24,6 +24,8 @@ Personal website for Alexander Miller. React + Express, deployed via Docker on d
 - Right-click context menu in article editor for links and images (no toolbar)
 - Native browser spellcheck preserved — custom menu only appears on text selection, links, or images
 - Auth uses Bearer token (SUTOMI_PASSWORD env var), session stored in sessionStorage
+- **Dashboard tools are modular:** each lives in its own folder under `src/tools/<name>/` (page component + pure logic + its own CSS), is routed at `/tools/<name>` in `App.jsx` (logged in only), and is linked from the `tools` array in `Dashboard.jsx`. Add new tools the same way; keep them self-contained and avoid touching `App.css`
+- QR Creator (`src/tools/qr/`) generates codes client-side with the `qrcode` npm package — no server endpoint, nothing leaves the browser. Logic ported from `~/Projects/qr-creator` (Python); preview is brown-on-cream, downloads are black-on-white SVG/PNG
 
 ## Deployment
 ```bash
@@ -41,6 +43,7 @@ rsync -av src/pages/Home.jsx dedibox:/data/sutomi/src/pages/Home.jsx
 - `/login` — Password login
 - `/dashboard` — Tools dashboard (logged in only)
 - `/articles` — Manage articles with rich editor (logged in only)
+- `/tools/qr` — QR Creator: url / text / geo to SVG or PNG (logged in only)
 
 ## API
 - `GET /api/welcome` — welcome message

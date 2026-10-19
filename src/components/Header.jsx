@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 export default function Header({ user, onLogout }) {
   const location = useLocation()
-  const onDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/articles')
+  const onDashboard = ['/dashboard', '/articles', '/tools'].some((p) => location.pathname.startsWith(p))
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-GB', {
     day: 'numeric',

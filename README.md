@@ -21,6 +21,12 @@ npm start         # backend (localhost:3000)
 
 The Vite dev server proxies `/api` requests to the Express backend.
 
+## Dashboard tools
+
+Logged-in tools live under `src/tools/<name>/` as self-contained modules (component, logic, CSS) routed at `/tools/<name>`.
+
+- **QR Creator** (`/tools/qr`) — turn a URL, text, or `lat,lon` into a QR code, download as SVG or PNG. Generated entirely in the browser.
+
 ## Deployment
 
 ```bash
