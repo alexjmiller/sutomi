@@ -924,6 +924,10 @@ button.eh-cell {
 }
 
 @media (max-width: 899px) {
+  .eh-interview.narrow .eh-chat {
+    padding-bottom: 64px; /* the "your map" toggle floats over the bottom edge */
+  }
+
   .eh-cal-body,
   .eh-cal-body.with-panel {
     grid-template-columns: minmax(0, 1fr);
@@ -950,4 +954,47 @@ button.eh-cell {
   .eh-cell {
     padding: 3px;
   }
+}
+
+/* "later": things put aside during an interview */
+.eh-aside {
+  font-size: 16px;
+  opacity: 0.7;
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.eh-aside-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.eh-aside-list li {
+  margin-bottom: 4px;
+}
+
+.eh-map .eh-aside-list {
+  margin-top: 4px;
+}
+
+.eh-map .eh-h + .eh-muted + .eh-h,
+.eh-map .eh-cards + .eh-h {
+  margin-top: 20px;
+}
+
+.eh-later {
+  margin: 12px 0 20px;
+}
+
+.eh-later .eh-aside-list {
+  font-size: 18px;
+  opacity: 1;
+  margin-bottom: 12px;
+}
+
+.eh-later .eh-aside-list li {
+  margin-bottom: 6px;
 }

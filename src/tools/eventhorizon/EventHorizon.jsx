@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Link, Routes, Route, useParams } from 'react-router-dom'
 import * as api from './api'
 import { CATEGORIES } from './time'
-import Interview, { savedSessions } from './Interview'
+import Interview, { savedSessions, deferredLabel } from './Interview'
 import Calendar from './Calendar'
 import { SpaceBar, SPACE_LABEL } from './SpaceBar'
 import './eventhorizon.css'
@@ -33,11 +33,14 @@ function Home() {
   const [who, setWho] = useState(null)
   const [live, setLive] = useState(null)
   const [saved, setSaved] = useState(() => savedSessions(space))
+  const [deferred, setDeferred] = useState(null) // the service's "to come back to" list, per script
 
   useEffect(() => {
     let on = true
     setHealth(null); setWho(null); setLive(null)
     setSaved(savedSessions(space))
+    setDeferred(null)
+    api.getDeferred().then((r) => on && setDeferred(r.items)).catch(() => on && setDeferred([]))
     api.health().then((h) => on && setHealth(h)).catch(() => on && setHealth({ interview: 'unreachable', substrate: 'unreachable' }))
     api.whoami().then((w) => on && setWho(w)).catch(() => {})
     api.listInstances().then((r) => on && setLive(r.items.length)).catch(() => on && setLive(null))
@@ -79,7 +82,7 @@ function Home() {
           <ul className="eh-entries">
             {saved.map((s) => (
               <li key={s.id}>
-                <Link to={`/tools/eventhorizon/interview/${s.kind}/${s.id}`} className="eh-entry-title">{s.name || s.id}</Link>
+                <Link to={`/tools/eventhorizon/interview/${s.kind}/${s.id}${s.deferredOnly ? '?later=1' : ''}`} className="eh-entry-title">{s.name || s.id}{s.deferredOnly ? ' — what you put aside' : ''}</Link>
                 <span className="eh-entry-desc">continue where you left off{s.instances ? ` · ${s.instances} on the map so far` : ''}</span>
               </li>
             ))}
@@ -87,10 +90,27 @@ function Home() {
         </section>
       )}
 
+      {deferred?.length > 0 && (
+        <section className="eh-section">
+          <h3 className="eh-h">to come back to <span className="eh-count">{deferred.length}</span></h3>
+          <p className="eh-muted">What you put aside with "later". Pick it up whenever you have the details; it only asks about these.</p>
+          {[...new Set(deferred.map((d) => d.script))].map((script) => (
+            <div key={script} className="eh-later">
+              <ul className="eh-aside-list">
+                {deferred.filter((d) => d.script === script).map((d, k) => (
+                  <li key={k}><strong>{deferredLabel(d)}</strong> <span className="eh-muted">· {d.section.title.toLowerCase()}</span></li>
+                ))}
+              </ul>
+              <Link to={`/tools/eventhorizon/interview/script/${script}?later=1`} className="eh-btn primary">continue</Link>
+            </div>
+          ))}
+        </section>
+      )}
+
       <ul className="eh-entries">
         <li>
           <Link to="/tools/eventhorizon/interview/script/onboarding" className="eh-entry-title">build your map</Link>
-          <span className="eh-entry-desc">the full walk: people, documents, vehicles, home, money, health</span>
+          <span className="eh-entry-desc">the full walk: people, documents, vehicles, home, money, health — say "later" to anything you don't have to hand</span>
         </li>
         <li>
           <Link to="/tools/eventhorizon/add" className="eh-entry-title">add one thing</Link>

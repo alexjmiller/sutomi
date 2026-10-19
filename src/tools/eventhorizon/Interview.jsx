@@ -2,14 +2,16 @@
 // finished event appears on the map beside the conversation. The engine's state is opaque: we store
 // it and send it back untouched.
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import * as api from './api'
 import { fmtIsoDate, spellIso } from './time'
 import { SpaceBar } from './SpaceBar'
 
 // Sessions are keyed by space so an interview begun in Test can't be committed into Default.
+// A run of only what was put aside ("later") is its own session: `later:<script>`.
 const PREFIX = 'eh_interview:'
 const key = (space, id) => `${PREFIX}${space}:${id}`
+const sessionId = (id, deferredOnly) => (deferredOnly ? `later:${id}` : id)
 
 export function loadSession(space, id) {
   try {
@@ -38,13 +40,16 @@ export function savedSessions(space) {
       const [sp, id] = rest.includes(':') ? rest.split(/:(.*)/) : ['default', rest]
       if (sp !== space) continue
       const s = JSON.parse(localStorage.getItem(k))
-      if (s && !s.results) out.push({ id, kind: s.kind, name: s.name, instances: s.instances?.length || 0 })
+      if (s && !s.results) out.push({ id: s.id || id, kind: s.kind, name: s.name, instances: s.instances?.length || 0, deferredOnly: !!s.deferredOnly })
     }
   } catch { /* ignore */ }
   return out
 }
 
 const stepsText = (i) => (i.steps ? `${i.steps} step${i.steps === 1 ? '' : 's'}` : 'no tasks')
+
+/** "MOT test · the Golf" — a deferred entry's node with whatever was already known. */
+export const deferredLabel = (d) => d.nodes.map((n) => n.name).join(', ') + Object.values(d.carried || {}).map((v) => ` · ${v}`).join('')
 
 /** Transcript entries for a new question: section divider, node helper, then the question. */
 function contextEntries(prev, q, kind) {
@@ -72,8 +77,11 @@ function useWide(px = 900) {
 }
 
 export default function Interview({ kind, id }) {
+  const [params] = useSearchParams()
+  const deferredOnly = kind === 'script' && params.get('later') === '1' // walk only what was put aside
+  const sid = sessionId(id, deferredOnly)
   const [space] = useState(() => api.getSpace())
-  const [resumable, setResumable] = useState(() => loadSession(space, id))
+  const [resumable, setResumable] = useState(() => loadSession(space, sid))
   const [session, setSession] = useState(null)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState(null)
@@ -92,8 +100,9 @@ export default function Interview({ kind, id }) {
 
   function apply(s) {
     setSession(s)
-    if (s.results) clearSession(space, id)
-    else saveSession(space, id, s)
+    // nothing left to do once committed — or once finished with nothing to commit
+    if (s.results || (s.done && !s.instances.length)) clearSession(space, sid)
+    else saveSession(space, sid, s)
   }
 
   async function start() {
@@ -107,11 +116,13 @@ export default function Interview({ kind, id }) {
         const script = items.find((s) => s.id === id)
         if (script) { name = script.name; intro = script.intro }
       }
-      const turn = await api.startInterview(kind === 'script' ? { script: id } : { node: id })
+      const turn = await api.startInterview(kind === 'script' ? { script: id, ...(deferredOnly ? { deferredOnly: true } : {}) } : { node: id })
       if (kind === 'node' && turn.question?.context.node) name = turn.question.context.node.name
-      const transcript = intro ? [{ kind: 'intro', text: intro }] : []
+      const transcript = deferredOnly
+        ? [{ kind: 'intro', text: 'Picking up what you put aside. Anything you still don\'t have to hand can wait again.' }]
+        : intro ? [{ kind: 'intro', text: intro }] : []
       transcript.push(...contextEntries(null, turn.question, kind))
-      apply({ id, kind, name, state: turn.state, question: turn.question, done: turn.done, transcript, instances: [], lastAdded: null, results: null })
+      apply({ id, kind, name, deferredOnly, state: turn.state, question: turn.question, done: turn.done, transcript, instances: [], deferred: [], lastAdded: null, results: null })
     } catch (e) {
       setProblem(e.message)
     } finally {
@@ -119,17 +130,21 @@ export default function Interview({ kind, id }) {
     }
   }
 
-  async function send(input) {
+  /** Send an answer — or, with `later`, put the thing being asked about aside and move on. */
+  async function send(input, later = false) {
     if (busy || !session?.question) return
     setBusy(true)
     setProblem(null)
     const q = session.question
     try {
-      const turn = await api.answer(session.state, input)
-      const shown = input.trim() ? input.trim() : (q.default == null ? 'skip' : showDefault(q))
+      const turn = await api.answer(session.state, input, later)
+      const shown = later ? 'later' : input.trim() ? input.trim() : (q.default == null ? 'skip' : showDefault(q))
       const transcript = [...session.transcript, { kind: 'a', text: shown }]
       let instances = session.instances
       let lastAdded = session.lastAdded
+      const deferred = turn.deferred || session.deferred || []
+      const newlyAside = deferred.slice((session.deferred || []).length)
+      if (newlyAside.length) transcript.push({ kind: 'later', text: newlyAside.map(deferredLabel).join(', ') })
       if (turn.error) {
         transcript.push({ kind: 'error', text: turn.error }, { kind: 'q', prompt: turn.question.prompt, help: turn.question.help })
       } else {
@@ -140,7 +155,7 @@ export default function Interview({ kind, id }) {
         }
         transcript.push(...contextEntries(q, turn.question, kind))
       }
-      apply({ ...session, state: turn.state, question: turn.question, done: turn.done, transcript, instances, lastAdded })
+      apply({ ...session, state: turn.state, question: turn.question, done: turn.done, transcript, instances, deferred, lastAdded })
     } catch (e) {
       setProblem(e.message)
     } finally {
@@ -167,7 +182,7 @@ export default function Interview({ kind, id }) {
   }
 
   function restart() {
-    clearSession(space, id)
+    clearSession(space, sid)
     setResumable(null)
     setSession(null)
     setDismissed(new Set())
@@ -175,7 +190,8 @@ export default function Interview({ kind, id }) {
   }
 
   const instances = session?.instances || []
-  const map = <MapPanel instances={instances} lastAdded={session?.lastAdded} />
+  const deferred = session?.deferred || []
+  const map = <MapPanel instances={instances} deferred={deferred} lastAdded={session?.lastAdded} />
 
   return (
     <main className="page eh">
@@ -207,12 +223,12 @@ export default function Interview({ kind, id }) {
               </p>
             )}
             {session && !session.done && session.question && !busy && (
-              <AnswerInput key={session.transcript.length} question={session.question} onSend={send} />
+              <AnswerInput key={session.transcript.length} question={session.question} onSend={send} onLater={kind === 'script' ? () => send('', true) : null} />
             )}
             {session?.done && !session.results && (
-              <Review instances={instances} busy={busy} onCommit={commit} />
+              <Review instances={instances} deferred={deferred} busy={busy} onCommit={commit} />
             )}
-            {session?.results && <Results results={session.results} instances={instances} />}
+            {session?.results && <Results results={session.results} instances={instances} deferred={deferred} />}
             <div ref={bottomRef} />
           </section>
           {wide ? map : (
@@ -252,6 +268,7 @@ function Transcript({ entries, dismissed, onDismiss }) {
           case 'a': return <li key={i} className="eh-user">{e.text}</li>
           case 'error': return <li key={i} className="eh-bot eh-err">{e.text}</li>
           case 'added': return <li key={i} className="eh-added">added to your map: {e.title}</li>
+          case 'later': return <li key={i} className="eh-aside">put aside: {e.text}</li>
           default: return null
         }
       })}
@@ -263,7 +280,8 @@ function Transcript({ entries, dismissed, onDismiss }) {
 const showDefault = (q) => (q.kind === 'date' ? spellIso(q.default) : q.default)
 
 /** Input shaped by the question kind. Sends the text as typed; the service does the parsing. */
-function AnswerInput({ question: q, onSend }) {
+function AnswerInput({ question: q, onSend, onLater }) {
+  const later = onLater && <button type="button" className="eh-text-btn" onClick={onLater}>later — I'll come back to this</button>
   const [text, setText] = useState('')
   const ref = useRef(null)
   const dateRef = useRef(null)
@@ -288,6 +306,7 @@ function AnswerInput({ question: q, onSend }) {
           <button type="button" className="eh-btn" onClick={() => onSend('no')}>no</button>
         </div>
         {q.help && <p className="eh-help">{q.help}</p>}
+        {later && <p className="eh-kbd">{later}</p>}
       </div>
     )
   }
@@ -328,14 +347,17 @@ function AnswerInput({ question: q, onSend }) {
         {q.person && "type a name, or 'me' for yourself"}
         {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {showDefault(q)}</button></>}
         {!q.required && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>skip</button></>}
+        {later && (q.kind === 'date' || q.person || (q.default != null && text.trim()) || (!q.required && text.trim())) && ' · '}
+        {later}
       </p>
     </form>
   )
 }
 
 /** The map panel: the product moment. Each finished event lands here as a card. */
-function MapPanel({ instances, lastAdded }) {
+function MapPanel({ instances, deferred, lastAdded }) {
   const sorted = [...instances].sort((a, b) => a.anchorDate.localeCompare(b.anchorDate))
+  const aside = (deferred || []).map(deferredLabel)
   return (
     <aside className="eh-map" aria-label="your map">
       <h3 className="eh-h">your map <span className="eh-count">{instances.length}</span></h3>
@@ -349,11 +371,30 @@ function MapPanel({ instances, lastAdded }) {
           </li>
         ))}
       </ul>
+      {aside.length > 0 && (
+        <>
+          <h3 className="eh-h">to come back to <span className="eh-count">{aside.length}</span></h3>
+          <ul className="eh-aside-list">
+            {aside.map((t, k) => <li key={k}>{t}</li>)}
+          </ul>
+        </>
+      )}
     </aside>
   )
 }
 
-function Review({ instances, busy, onCommit }) {
+/** "Put aside for later: MOT test · the Golf, Eye test" — shown at the end so nothing feels lost. */
+function AsideNote({ deferred }) {
+  const names = (deferred || []).map(deferredLabel)
+  if (!names.length) return null
+  return (
+    <p className="eh-muted">
+      Put aside: {names.join(', ')}. You'll find {names.length === 1 ? 'it' : 'them'} under "to come back to" on the <Link to="/tools/eventhorizon">event horizon</Link> page whenever you have the details.
+    </p>
+  )
+}
+
+function Review({ instances, deferred, busy, onCommit }) {
   const [dropped, setDropped] = useState(() => new Set())
   const kept = instances.filter((_, i) => !dropped.has(i))
   const toggle = (i) => {
@@ -366,6 +407,7 @@ function Review({ instances, busy, onCommit }) {
     return (
       <div className="eh-review">
         <p className="eh-bot">That's the end — nothing was added this time.</p>
+        <AsideNote deferred={deferred} />
         <Link to="/tools/eventhorizon" className="eh-btn">back to event horizon</Link>
       </div>
     )
@@ -373,6 +415,7 @@ function Review({ instances, busy, onCommit }) {
   return (
     <div className="eh-review">
       <p className="eh-bot">That's everything. Here's what will go on your map — untick anything you'd rather leave out.</p>
+      <AsideNote deferred={deferred} />
       <ul className="eh-review-list">
         {instances.map((i, k) => (
           <li key={k}>
@@ -392,12 +435,13 @@ function Review({ instances, busy, onCommit }) {
   )
 }
 
-function Results({ results, instances }) {
+function Results({ results, instances, deferred }) {
   const ok = results.filter((r) => !r.error)
   const anchorFor = (title) => instances.find((i) => i.title === title)?.anchorDate
   return (
     <div className="eh-review">
       <p className="eh-bot">{ok.length ? `${ok.length} added to your map.` : 'Nothing could be added.'}</p>
+      <AsideNote deferred={deferred} />
       <ul className="eh-review-list">
         {results.map((r, k) => (
           <li key={k} className={r.error ? 'eh-err' : ''}>
