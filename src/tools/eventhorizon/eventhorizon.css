@@ -1117,3 +1117,19 @@ button.eh-cell {
   font-style: italic;
   opacity: 0.8;
 }
+
+/* "+ add a step" on a chain already on the map */
+.eh-add-step {
+  margin: 10px 0;
+}
+
+.eh-add-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eh-add-step-form .eh-row {
+  align-items: center;
+  flex-wrap: wrap;
+}

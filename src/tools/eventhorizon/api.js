@@ -47,6 +47,8 @@ export const getDeferred = () => request('/interview/deferred')
 export const clearDeferred = (script) => request(`/interview/deferred/${encodeURIComponent(script)}`, { method: 'DELETE' })
 export const listInstances = () => request('/interview/instances')
 export const removeInstance = (tag) => request(`/interview/instances/${encodeURIComponent(tag)}`, { method: 'DELETE' })
+/** Add a step to an instance already on the map: { title, date: 'YYYY-MM-DD', once?: true } → { anchorDate, chain }. */
+export const addStep = (tag, step) => post(`/interview/instances/${encodeURIComponent(tag)}/steps`, step)
 
 // Substrate (materialized occurrences)
 export const getOccurrences = (params) => request(`/substrate/events?${new URLSearchParams(params)}`)

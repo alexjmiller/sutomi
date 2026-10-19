@@ -6,7 +6,7 @@ import { DateTime } from 'luxon'
 import * as api from './api'
 import {
   CATEGORIES, instanceTag, nodeId, isAnchor, isChainTask, isBand, isTransparent, isBirthday, ageOn, hasTag, kindOf, isTask, isInfo,
-  startOf, endOf, fmtTime, fmtDay, fmtMonth, whenText, monthGrid, horizon, beyondHorizon, tintFor, byDay, sortByStart, dedupe,
+  startOf, endOf, fmtTime, fmtDay, fmtMonth, fmtShortIso, spellIso, whenText, monthGrid, horizon, beyondHorizon, tintFor, byDay, sortByStart, dedupe,
 } from './time'
 import { SpaceBar } from './SpaceBar'
 
@@ -20,12 +20,15 @@ function useOccurrences() {
   const [version, bump] = useReducer((x) => x + 1, 0)
   const [loading, setLoading] = useState(0)
   const [error, setError] = useState(null)
-  const [generation, setGeneration] = useState(0) // bumps when the cache is thrown away, so views refetch
+  const [generation, setGeneration] = useState(0) // bumps when the map changed, so views refetch
+  const stale = useRef(false) // after a change: keep showing what we have while the months reload
 
   const ensure = useCallback(async (keys) => {
-    const missing = keys.filter((k) => !cache.current.has(k))
+    const missing = keys.filter((k) => !cache.current.has(k) || stale.current)
     if (!missing.length) return
-    missing.forEach((k) => cache.current.set(k, []))
+    const fresh = missing.filter((k) => !cache.current.has(k))
+    stale.current = false
+    fresh.forEach((k) => cache.current.set(k, []))
     setLoading((n) => n + 1)
     try {
       await Promise.all(missing.map(async (k) => {
@@ -35,7 +38,7 @@ function useOccurrences() {
       }))
       setError(null)
     } catch (e) {
-      missing.forEach((k) => cache.current.delete(k))
+      fresh.forEach((k) => cache.current.delete(k))
       setError(e.message)
     } finally {
       setLoading((n) => n - 1)
@@ -48,7 +51,7 @@ function useOccurrences() {
     for (const [k, arr] of cache.current) cache.current.set(k, arr.map((it) => (it.event_id === eventId ? fn(it) : it)))
     bump()
   }, [])
-  const reset = useCallback(() => { cache.current.clear(); setGeneration((g) => g + 1) }, [])
+  const reset = useCallback(() => { stale.current = true; setGeneration((g) => g + 1) }, [])
 
   return { ensure, itemsFor, patch, reset, loading: loading > 0, error, version, generation }
 }
@@ -166,7 +169,7 @@ export default function Calendar() {
   }
 
   const panel = selectedItem
-    ? <ItemDetail item={selectedItem} nodes={nodes} label={label} onClose={() => setSelected(null)} onToggle={toggleDone} onRemoved={() => { setSelected(null); occ.reset() }} />
+    ? <ItemDetail item={selectedItem} nodes={nodes} label={label} onClose={() => setSelected(null)} onToggle={toggleDone} onRemoved={() => { setSelected(null); occ.reset() }} onChanged={() => occ.reset()} />
     : dayOpen
       ? <DayList iso={dayOpen} items={(byDay(visible).get(dayOpen) || [])} label={label} onSelect={setSelected} onToggle={toggleDone} onClose={() => setDayOpen(null)} />
       : null
@@ -395,28 +398,27 @@ function DayList({ iso, items, label, onSelect, onToggle, onClose }) {
 }
 
 /** One item: when, what, its tags; for chain items the whole chain as a timeline with the anchor marked. */
-function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved }) {
+function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChanged }) {
   const tag = instanceTag(item.tags)
   const node = nodes.get(nodeId(item.tags))
   const [chain, setChain] = useState(null)
   const [detail, setDetail] = useState(null)
   const [problem, setProblem] = useState(null)
   const [removing, setRemoving] = useState(false)
+  const [chainGen, setChainGen] = useState(0) // bump to re-read the chain (after adding a step)
 
   useEffect(() => {
     let on = true
-    setChain(null)
-    setDetail(null)
-    setProblem(null)
+    if (!chainGen) { setChain(null); setDetail(null); setProblem(null) }
     if (tag) {
       const h = horizon()
       api.fetchAll({ tags: tag, from: utcIso(h.from), to: utcIso(h.to), limit: 100 })
         .then((items) => on && setChain(sortByStart(items)))
         .catch((e) => on && setProblem(e.message))
     }
-    if (isAnchor(item)) api.getEvent(item.event_id).then((d) => on && setDetail(d)).catch(() => {})
+    if (isAnchor(item) && !chainGen) api.getEvent(item.event_id).then((d) => on && setDetail(d)).catch(() => {})
     return () => { on = false }
-  }, [item.occurrence_id, tag]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.occurrence_id, tag, chainGen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the timeline in step with optimistic completes.
   const toggle = async (it) => {
@@ -483,6 +485,7 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved }) {
               ))}
             </ol>
           )}
+          {chain && <AddStep tag={tag} anchorDate={anchor ? startOf(anchor).toISODate() : startOf(item).toISODate()} onAdded={() => { setChainGen((g) => g + 1); onChanged() }} />}
           <button type="button" className="eh-text-btn eh-danger" disabled={removing || !chain} onClick={remove}>
             {removing ? 'removing…' : 'remove this whole chain'}
           </button>
@@ -490,5 +493,61 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved }) {
       )}
       {problem && <p className="eh-problem">{problem}</p>}
     </div>
+  )
+}
+
+
+/** "+ add a step" on something already on the map: a title, a date (the day before by default), and whether it repeats with the event. */
+function AddStep({ tag, anchorDate, onAdded }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [date, setDate] = useState(() => DateTime.fromISO(anchorDate).minus({ days: 1 }).toISODate())
+  const [once, setOnce] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState(null)
+  const [added, setAdded] = useState(null)
+  const dateRef = useRef(null)
+  const pick = () => { try { dateRef.current.showPicker() } catch { dateRef.current.click() } }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!title.trim() || busy) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      await api.addStep(tag, { title: title.trim(), date, ...(once ? { once: true } : {}) })
+      setAdded(`${title.trim()} · ${fmtShortIso(date)}${once ? ' · just this time' : ''}`)
+      setTitle('')
+      setOpen(false)
+      onAdded()
+    } catch (err) {
+      setProblem(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <p className="eh-add-step">
+        <button type="button" className="eh-text-btn" onClick={() => { setAdded(null); setOpen(true) }}>+ add a step</button>
+        {added && <span className="eh-muted"> · added {added}{once ? '' : ' — it appears once the map catches up, usually within a minute'}</span>}
+      </p>
+    )
+  }
+  return (
+    <form className="eh-add-step eh-add-step-form" onSubmit={submit}>
+      <input className="eh-input" value={title} placeholder="what needs doing, e.g. empty out the car" aria-label="step" autoFocus onChange={(e) => setTitle(e.target.value)} />
+      <div className="eh-row">
+        <button type="button" className="eh-btn" onClick={pick} aria-label={`date: ${spellIso(date)}`}>{fmtShortIso(date)} · pick</button>
+        <input ref={dateRef} className="eh-date-hidden" type="date" value={date} tabIndex={-1} aria-hidden="true" onChange={(e) => e.target.value && setDate(e.target.value)} />
+        <label className="eh-checklabel"><input type="checkbox" checked={once} onChange={(e) => setOnce(e.target.checked)} /> just this time</label>
+      </div>
+      <div className="eh-actions">
+        <button type="submit" className="eh-btn primary" disabled={busy || !title.trim()}>{busy ? 'adding…' : 'add'}</button>
+        <button type="button" className="eh-btn" onClick={() => setOpen(false)}>cancel</button>
+      </div>
+      {problem && <p className="eh-problem">{problem}</p>}
+    </form>
   )
 }
