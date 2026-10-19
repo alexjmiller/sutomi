@@ -229,7 +229,7 @@ export default function Interview({ kind, id }) {
               <Review instances={instances} deferred={deferred} busy={busy} onCommit={commit} />
             )}
             {session?.results && <Results results={session.results} instances={instances} deferred={deferred} />}
-            <div ref={bottomRef} />
+            <div ref={bottomRef} className="eh-end" />
           </section>
           {wide ? map : (
             <>

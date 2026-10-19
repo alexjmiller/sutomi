@@ -924,8 +924,15 @@ button.eh-cell {
 }
 
 @media (max-width: 899px) {
-  .eh-interview.narrow .eh-chat {
-    padding-bottom: 64px; /* the "your map" toggle floats over the bottom edge */
+  /* the "your map" toggle sits under the chat when it fits, and sticks to the bottom edge when it doesn't */
+  .eh-interview.narrow .eh-map-toggle {
+    position: sticky;
+    display: block;
+    margin: 12px 0 0 auto;
+  }
+
+  .eh-interview.narrow .eh-end {
+    height: 72px; /* the chat scrolls to this spacer, so the last answer clears the toggle */
   }
 
   .eh-cal-body,
