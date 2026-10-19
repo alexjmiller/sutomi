@@ -1,4 +1,4 @@
-// Event Horizon — which space you're in. Quiet for Default (the real map), loud for Test.
+// Event Horizon — which space you're in. Default (the real map) just says hello; Test is labelled loudly.
 import { useEffect, useState } from 'react'
 import * as api from './api'
 
@@ -16,8 +16,10 @@ export function SpaceBar({ space, who: given }) {
   return (
     <p className={`eh-space ${space}`} aria-live="polite">
       <span className="eh-space-dot" aria-hidden="true">{space === 'test' ? '▲' : '●'}</span>
-      <span className="eh-space-name">{who?.space?.name ? (space === 'test' ? `${who.space.name} space` : who.space.name) : SPACE_LABEL[space]}</span>
-      {who?.user?.name && <span className="eh-muted"> · hello {who.user.name}</span>}
+      {space === 'test' && <span className="eh-space-name">{who?.space?.name ? `${who.space.name} space` : SPACE_LABEL.test}</span>}
+      {who?.user?.name
+        ? <span className={space === 'test' ? 'eh-muted' : 'eh-space-name'}>{space === 'test' ? ' · ' : ''}hello {who.user.name}</span>
+        : space !== 'test' && <span className="eh-space-name">your map</span>}
       {space === 'test' && <span className="eh-muted"> · nothing here touches your real map</span>}
       {problem && <span className="eh-problem"> · {problem}</span>}
     </p>
