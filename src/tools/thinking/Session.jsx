@@ -9,7 +9,7 @@ import {
 import { getBrief, saveBrief } from './api'
 import {
   TextInput, ChoiceInput, RouteInput, ListInput, PairInput, HmwInput, CardsInput, SelectInput,
-  TasksInput, LogInput, QuestionsInput, PickInput,
+  TasksInput, LogInput, QuestionsInput, PickInput, FlushContext,
 } from './inputs'
 
 export default function Session({ id }) {
@@ -23,6 +23,10 @@ export default function Session({ id }) {
   const dirty = useRef(false)
   const timer = useRef(null)
   const bottomRef = useRef(null)
+  // Inputs with an unsent "add another" draft register a flush here; every move commits them first.
+  const flushers = useRef(new Set())
+  const registerFlush = useCallback((fn) => { flushers.current.add(fn); return () => flushers.current.delete(fn) }, [])
+  const commitDrafts = () => flushers.current.forEach((fn) => fn())
 
   // Load (migrating v1 briefs on the way in)
   useEffect(() => {
@@ -115,6 +119,7 @@ export default function Session({ id }) {
   }
 
   function goDirect() {
+    commitDrafts()
     update((b) => {
       let n = ensureAim({ ...b, aim: { ...b.aim, discovery: 'direct' } })
       return startQuestion(n, n.questions.find((q) => q.isAim).id)
@@ -138,10 +143,12 @@ export default function Session({ id }) {
   }
 
   function stop(step) {
+    commitDrafts()
     update((b) => visit(setIn(b, step.path, 'stop'), 'brief'))
   }
 
   function next() {
+    commitDrafts()
     update((b) => {
       let n = b
       const step = buildSteps(n).find((s) => s.key === n.current)
@@ -163,9 +170,10 @@ export default function Session({ id }) {
     })
   }
 
-  function goTo(key) { update((b) => visit(b, key)) }
+  function goTo(key) { commitDrafts(); update((b) => visit(b, key)) }
 
   function back() {
+    commitDrafts()
     update((b) => {
       const keys = buildSteps(b).filter((s) => b.visited.includes(s.key)).map((s) => s.key)
       const i = keys.indexOf(b.current)
@@ -194,6 +202,7 @@ export default function Session({ id }) {
   const lastPick = [...visible].reverse().find((s) => s.type === 'pick')
 
   return (
+    <FlushContext.Provider value={registerFlush}>
     <main className="page tm">
       <div className="tm-top">
         <Link to="/tools/thinking" className="back-link">&lt; all briefs</Link>
@@ -247,6 +256,7 @@ export default function Session({ id }) {
       )}
       <div ref={bottomRef} />
     </main>
+    </FlushContext.Provider>
   )
 }
 

@@ -1,6 +1,20 @@
 // Thinking Machine — answer inputs. Each gets a value and onChange; some get extra context.
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { ROUTES, STATES, newId, today } from './flow'
+
+/**
+ * Inputs with an "add another" box keep the unsent text as a local draft. Committing it on blur
+ * inserts a row while the mouse is still down on a button, which shifts the button and loses the
+ * click. Instead the session calls every registered flush before it moves (continue, back, edit).
+ */
+export const FlushContext = createContext(() => () => {})
+
+function useFlush(add) {
+  const register = useContext(FlushContext)
+  const latest = useRef(add)
+  latest.current = add
+  useEffect(() => register(() => latest.current()), [register])
+}
 
 function AutoTextarea({ value, onChange, placeholder, onContinue, autoFocus, rows = 3, ariaLabel }) {
   const ref = useRef(null)
@@ -64,6 +78,7 @@ export function ListInput({ value = [], onChange, placeholder, label }) {
     onChange([...value, t])
     setDraft('')
   }
+  useFlush(add)
   return (
     <div className="tm-list">
       {label && <span className="tm-list-label">{label}</span>}
@@ -77,7 +92,7 @@ export function ListInput({ value = [], onChange, placeholder, label }) {
         ))}
       </ul>
       <input className="tm-add" value={draft} placeholder={placeholder} aria-label={`add ${label || 'item'}`}
-        onChange={(e) => setDraft(e.target.value)} onBlur={add}
+        onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} />
     </div>
   )
@@ -194,6 +209,7 @@ export function LogInput({ value = [], onChange }) {
     onChange([...value, { id: newId(), date: today(), text: t }])
     setDraft('')
   }
+  useFlush(add)
   return (
     <div className="tm-log-input">
       <ul className="tm-items">
@@ -221,6 +237,7 @@ export function QuestionsInput({ questions, onChange, onDirect }) {
     onChange([...questions, { id: newId(), text: t }])
     setDraft('')
   }
+  useFlush(add)
   return (
     <div className="tm-list">
       <ul className="tm-items">
@@ -234,7 +251,7 @@ export function QuestionsInput({ questions, onChange, onDirect }) {
         ))}
       </ul>
       <input className="tm-add" value={draft} placeholder="a question to work out" aria-label="add question" autoFocus
-        onChange={(e) => setDraft(e.target.value)} onBlur={add}
+        onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} />
       {!questions.length && (
         <div className="tm-inline-actions">
