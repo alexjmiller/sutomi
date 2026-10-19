@@ -249,6 +249,31 @@
   margin-top: 16px;
 }
 
+/* Dashboard */
+.dashboard-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-item {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+}
+
+.dashboard-title {
+  font-size: 18px;
+  text-decoration: underline;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.dashboard-desc {
+  font-size: 18px;
+}
+
 /* Article page */
 .back-link {
   display: inline-block;

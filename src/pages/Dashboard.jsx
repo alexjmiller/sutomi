@@ -12,15 +12,15 @@ const tools = [
 export default function Dashboard() {
   return (
     <main className="page">
-      <ul className="article-list">
+      <ul className="dashboard-list">
         {tools.map((tool) => (
-          <li key={tool.name} className="article-item">
+          <li key={tool.name} className="dashboard-item">
             {tool.path ? (
-              <Link to={tool.path} className="article-title">{tool.name}</Link>
+              <Link to={tool.path} className="dashboard-title">{tool.name}</Link>
             ) : (
-              <span className="article-title">{tool.name}</span>
+              <span className="dashboard-title">{tool.name}</span>
             )}
-            <span className="article-summary">{tool.description}</span>
+            <span className="dashboard-desc">{tool.description}</span>
           </li>
         ))}
       </ul>
