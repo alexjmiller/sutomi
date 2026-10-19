@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import ManageArticles from './pages/ManageArticles'
 import QrCreator from './tools/qr/QrCreator'
 import ThinkingMachine from './tools/thinking/ThinkingMachine'
+import EventHorizon from './tools/eventhorizon/EventHorizon'
 import './App.css'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/tools/qr" element={user ? <QrCreator /> : <Navigate to="/login" />} />
           <Route path="/tools/thinking" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
           <Route path="/tools/thinking/:id" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
+          <Route path="/tools/eventhorizon/*" element={user ? <EventHorizon /> : <Navigate to="/login" />} />
         </Routes>
         <Footer />
       </div>

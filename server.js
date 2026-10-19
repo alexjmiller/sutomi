@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { thinkingRouter } from './server/thinking.js'
+import { eventHorizonRouter } from './server/eventhorizon.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -10,7 +11,7 @@ const PORT = process.env.PORT || 3000
 const DATA_FILE = join(__dirname, 'data', 'articles.json')
 const PASSWORD = process.env.SUTOMI_PASSWORD || 'sutomi'
 
-app.use(express.json())
+app.use(express.json({ limit: '2mb' })) // interview state round-trips whole compiled plans
 app.use(express.static(join(__dirname, 'dist')))
 
 function readArticles() {
@@ -135,6 +136,7 @@ app.post('/api/login', (req, res) => {
 
 // Tools (auth): Thinking Machine briefs
 app.use('/api/thinking', auth, thinkingRouter(join(__dirname, 'data', 'thinking.json')))
+app.use('/api/eh', auth, eventHorizonRouter())
 
 // SPA fallback
 app.get('/{*splat}', (_req, res) => {

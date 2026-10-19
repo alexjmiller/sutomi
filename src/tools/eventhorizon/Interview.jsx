@@ -1,0 +1,391 @@
+// Event Horizon — the chat interview. The service asks, the person answers in plain words, and each
+// finished event appears on the map beside the conversation. The engine's state is opaque: we store
+// it and send it back untouched.
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import * as api from './api'
+import { fmtIsoDate } from './time'
+
+const PREFIX = 'eh_interview:'
+
+export function loadSession(id) {
+  try {
+    const s = localStorage.getItem(PREFIX + id)
+    return s ? JSON.parse(s) : null
+  } catch {
+    return null
+  }
+}
+function saveSession(id, s) {
+  try { localStorage.setItem(PREFIX + id, JSON.stringify(s)) } catch { /* private window etc. */ }
+}
+export function clearSession(id) {
+  try { localStorage.removeItem(PREFIX + id) } catch { /* ignore */ }
+}
+export function savedSessions() {
+  const out = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k.startsWith(PREFIX)) continue
+      const s = JSON.parse(localStorage.getItem(k))
+      if (s && !s.results) out.push({ id: k.slice(PREFIX.length), kind: s.kind, name: s.name, instances: s.instances?.length || 0 })
+    }
+  } catch { /* ignore */ }
+  return out
+}
+
+/** Transcript entries for a new question: section divider, node helper, then the question. */
+function contextEntries(prev, q, kind) {
+  const entries = []
+  if (!q) return entries
+  if (kind === 'script' && (!prev || prev.context.section.id !== q.context.section.id)) {
+    entries.push({ kind: 'section', title: q.context.section.title, intro: q.context.section.intro })
+  }
+  if (q.context.node && (!prev || prev.context.node?.id !== q.context.node.id)) {
+    entries.push({ kind: 'node', id: q.context.node.id, name: q.context.node.name, description: q.context.node.description })
+  }
+  entries.push({ kind: 'q', prompt: q.prompt, help: q.help })
+  return entries
+}
+
+function useWide(px = 900) {
+  const [wide, setWide] = useState(() => window.matchMedia(`(min-width: ${px}px)`).matches)
+  useEffect(() => {
+    const m = window.matchMedia(`(min-width: ${px}px)`)
+    const h = (e) => setWide(e.matches)
+    m.addEventListener('change', h)
+    return () => m.removeEventListener('change', h)
+  }, [px])
+  return wide
+}
+
+export default function Interview({ kind, id }) {
+  const [resumable, setResumable] = useState(() => loadSession(id))
+  const [session, setSession] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState(null)
+  const [dismissed, setDismissed] = useState(() => new Set())
+  const [mapOpen, setMapOpen] = useState(false)
+  const wide = useWide()
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    if (!session && !resumable) start()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  }, [session?.transcript.length, busy])
+
+  function apply(s) {
+    setSession(s)
+    if (s.results) clearSession(id)
+    else saveSession(id, s)
+  }
+
+  async function start() {
+    setBusy(true)
+    setProblem(null)
+    try {
+      let name = id
+      let intro = null
+      if (kind === 'script') {
+        const { items } = await api.getScripts()
+        const script = items.find((s) => s.id === id)
+        if (script) { name = script.name; intro = script.intro }
+      }
+      const turn = await api.startInterview(kind === 'script' ? { script: id } : { node: id })
+      if (kind === 'node' && turn.question?.context.node) name = turn.question.context.node.name
+      const transcript = intro ? [{ kind: 'intro', text: intro }] : []
+      transcript.push(...contextEntries(null, turn.question, kind))
+      apply({ id, kind, name, state: turn.state, question: turn.question, done: turn.done, transcript, instances: [], lastAdded: null, results: null })
+    } catch (e) {
+      setProblem(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function send(input) {
+    if (busy || !session?.question) return
+    setBusy(true)
+    setProblem(null)
+    const q = session.question
+    try {
+      const turn = await api.answer(session.state, input)
+      const shown = input.trim() ? input.trim() : (q.default ?? 'skip')
+      const transcript = [...session.transcript, { kind: 'a', text: shown }]
+      let instances = session.instances
+      let lastAdded = session.lastAdded
+      if (turn.error) {
+        transcript.push({ kind: 'error', text: turn.error }, { kind: 'q', prompt: turn.question.prompt, help: turn.question.help })
+      } else {
+        if (turn.added) {
+          instances = [...instances, turn.added]
+          lastAdded = turn.added.title
+          transcript.push({ kind: 'added', title: turn.added.title })
+        }
+        transcript.push(...contextEntries(q, turn.question, kind))
+      }
+      apply({ ...session, state: turn.state, question: turn.question, done: turn.done, transcript, instances, lastAdded })
+    } catch (e) {
+      setProblem(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function commit(kept) {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const { items } = await api.commit(kept)
+      apply({ ...session, results: items })
+    } catch (e) {
+      setProblem(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function resume() {
+    setSession(resumable)
+    setResumable(null)
+  }
+
+  function restart() {
+    clearSession(id)
+    setResumable(null)
+    setSession(null)
+    setDismissed(new Set())
+    start()
+  }
+
+  const instances = session?.instances || []
+  const map = <MapPanel instances={instances} lastAdded={session?.lastAdded} />
+
+  return (
+    <main className="page eh">
+      <div className="eh-top">
+        <Link to="/tools/eventhorizon" className="back-link">&lt; event horizon</Link>
+        {session && !session.results && <button type="button" className="eh-text-btn" onClick={restart}>start again</button>}
+      </div>
+
+      {resumable && !session ? (
+        <section className="eh-chat">
+          <h2 className="eh-title">{resumable.name}</h2>
+          <p className="eh-bot">You were part way through this{resumable.instances.length ? `, with ${resumable.instances.length} on the map` : ''}.</p>
+          <div className="eh-actions">
+            <button type="button" className="eh-btn primary" onClick={resume}>continue where you left off</button>
+            <button type="button" className="eh-btn" onClick={restart}>start again</button>
+          </div>
+        </section>
+      ) : (
+        <div className={`eh-interview${wide ? '' : ' narrow'}`}>
+          <section className="eh-chat" aria-live="polite">
+            {session && <h2 className="eh-title">{session.name}</h2>}
+            <Transcript entries={session?.transcript || []} dismissed={dismissed} onDismiss={(i) => setDismissed(new Set([...dismissed, i]))} />
+            {busy && <p className="eh-muted eh-thinking">…</p>}
+            {problem && (
+              <p className="eh-problem">
+                {problem}{' '}
+                {!session && <button type="button" className="eh-text-btn" onClick={start}>try again</button>}
+              </p>
+            )}
+            {session && !session.done && session.question && !busy && (
+              <AnswerInput key={session.transcript.length} question={session.question} onSend={send} />
+            )}
+            {session?.done && !session.results && (
+              <Review instances={instances} busy={busy} onCommit={commit} />
+            )}
+            {session?.results && <Results results={session.results} instances={instances} />}
+            <div ref={bottomRef} />
+          </section>
+          {wide ? map : (
+            <>
+              <button type="button" className="eh-map-toggle" onClick={() => setMapOpen(!mapOpen)} aria-expanded={mapOpen}>
+                your map · {instances.length}
+              </button>
+              {mapOpen && <div className="eh-sheet">{map}</div>}
+            </>
+          )}
+        </div>
+      )}
+    </main>
+  )
+}
+
+function Transcript({ entries, dismissed, onDismiss }) {
+  return (
+    <ol className="eh-transcript">
+      {entries.map((e, i) => {
+        switch (e.kind) {
+          case 'intro': return <li key={i} className="eh-intro-text">{e.text}</li>
+          case 'section': return (
+            <li key={i} className="eh-divider">
+              <span>{e.title}</span>
+              {e.intro && <p>{e.intro}</p>}
+            </li>
+          )
+          case 'node': return dismissed.has(i) ? null : (
+            <li key={i} className="eh-node">
+              <strong>{e.name}</strong>
+              <p>{e.description}</p>
+              <button type="button" className="eh-x" aria-label="dismiss" onClick={() => onDismiss(i)}>×</button>
+            </li>
+          )
+          case 'q': return <li key={i} className="eh-bot">{e.prompt}</li>
+          case 'a': return <li key={i} className="eh-user">{e.text}</li>
+          case 'error': return <li key={i} className="eh-bot eh-err">{e.text}</li>
+          case 'added': return <li key={i} className="eh-added">added to your map: {e.title}</li>
+          default: return null
+        }
+      })}
+    </ol>
+  )
+}
+
+/** Input shaped by the question kind. Sends the text as typed; the service does the parsing. */
+function AnswerInput({ question: q, onSend }) {
+  const [text, setText] = useState('')
+  const ref = useRef(null)
+  useEffect(() => { ref.current?.focus() }, [])
+  const canSkip = !q.required || q.default != null
+  const submit = (e) => {
+    e?.preventDefault()
+    if (!text.trim() && !canSkip) return
+    onSend(text)
+  }
+
+  if (q.kind === 'yesno') {
+    return (
+      <div className="eh-answer">
+        <div className="eh-actions">
+          <button ref={ref} type="button" className="eh-btn primary" onClick={() => onSend('yes')}>yes</button>
+          <button type="button" className="eh-btn" onClick={() => onSend('no')}>no</button>
+        </div>
+        {q.help && <p className="eh-help">{q.help}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <form className="eh-answer" onSubmit={submit}>
+      {q.kind === 'choice' && (
+        <div className="eh-chips">
+          {q.options.map((o) => (
+            <button key={o} type="button" className="eh-chipbtn" onClick={() => onSend(o)}>{o}</button>
+          ))}
+        </div>
+      )}
+      <div className="eh-row">
+        <input
+          ref={ref}
+          className="eh-input"
+          type={q.kind === 'number' ? 'text' : 'text'}
+          inputMode={q.kind === 'number' ? 'decimal' : 'text'}
+          value={text}
+          placeholder={q.default != null ? q.default : q.kind === 'date' ? 'e.g. 3 March 2027' : q.kind === 'choice' ? 'or type an answer' : 'your answer'}
+          aria-label={q.prompt}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {q.kind === 'date' && (
+          <input className="eh-date" type="date" aria-label="pick a date" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ''} onChange={(e) => setText(e.target.value)} />
+        )}
+        <button type="submit" className="eh-btn primary" disabled={!text.trim() && !canSkip}>
+          {!text.trim() && q.default != null ? 'use this' : !text.trim() && canSkip ? 'skip' : 'send'}
+        </button>
+      </div>
+      {q.help && <p className="eh-help">{q.help}</p>}
+      <p className="eh-kbd">
+        {q.kind === 'date' && 'dates can be "3 March 2027", "03/03/2027" or "2027-03-03"'}
+        {q.default != null && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>use {q.default}</button></>}
+        {!q.required && text.trim() && <> · <button type="button" className="eh-text-btn" onClick={() => onSend('')}>skip</button></>}
+      </p>
+    </form>
+  )
+}
+
+/** The map panel: the product moment. Each finished event lands here as a card. */
+function MapPanel({ instances, lastAdded }) {
+  const sorted = [...instances].sort((a, b) => a.anchorDate.localeCompare(b.anchorDate))
+  return (
+    <aside className="eh-map" aria-label="your map">
+      <h3 className="eh-h">your map <span className="eh-count">{instances.length}</span></h3>
+      {!instances.length && <p className="eh-muted">each finished event appears here</p>}
+      <ul className="eh-cards">
+        {sorted.map((i, k) => (
+          <li key={`${i.title}|${i.anchorDate}|${k}`} className={`eh-card${i.title === lastAdded ? ' new' : ''}`}>
+            <strong>{i.title}</strong>
+            <span>{fmtIsoDate(i.anchorDate)}</span>
+            <span className="eh-muted">{i.steps} step{i.steps === 1 ? '' : 's'} · first on {fmtIsoDate(i.firstStep)}</span>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+function Review({ instances, busy, onCommit }) {
+  const [dropped, setDropped] = useState(() => new Set())
+  const kept = instances.filter((_, i) => !dropped.has(i))
+  const toggle = (i) => {
+    const n = new Set(dropped)
+    if (n.has(i)) n.delete(i)
+    else n.add(i)
+    setDropped(n)
+  }
+  if (!instances.length) {
+    return (
+      <div className="eh-review">
+        <p className="eh-bot">That's the end — nothing was added this time.</p>
+        <Link to="/tools/eventhorizon" className="eh-btn">back to event horizon</Link>
+      </div>
+    )
+  }
+  return (
+    <div className="eh-review">
+      <p className="eh-bot">That's everything. Here's what will go on your map — untick anything you'd rather leave out.</p>
+      <ul className="eh-review-list">
+        {instances.map((i, k) => (
+          <li key={k}>
+            <label>
+              <input type="checkbox" checked={!dropped.has(k)} onChange={() => toggle(k)} />
+              <span><strong>{i.title}</strong> — {fmtIsoDate(i.anchorDate)} · {i.steps} step{i.steps === 1 ? '' : 's'}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="eh-actions">
+        <button type="button" className="eh-btn primary" disabled={busy || !kept.length} onClick={() => onCommit(kept)}>
+          add {kept.length} to my map
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Results({ results, instances }) {
+  const ok = results.filter((r) => !r.error)
+  const anchorFor = (title) => instances.find((i) => i.title === title)?.anchorDate
+  return (
+    <div className="eh-review">
+      <p className="eh-bot">{ok.length ? `${ok.length} added to your map.` : 'Nothing could be added.'}</p>
+      <ul className="eh-review-list">
+        {results.map((r, k) => (
+          <li key={k} className={r.error ? 'eh-err' : ''}>
+            <strong>{r.title}</strong>
+            {r.error ? ` — ${r.error}` : (
+              <> — <Link to={`/tools/eventhorizon/calendar?date=${anchorFor(r.title) || ''}`}>see it on the map</Link></>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="eh-actions">
+        <Link to="/tools/eventhorizon/calendar" className="eh-btn primary">my map</Link>
+        <Link to="/tools/eventhorizon" className="eh-btn">back to event horizon</Link>
+      </div>
+    </div>
+  )
+}

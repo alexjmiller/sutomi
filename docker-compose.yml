@@ -7,6 +7,7 @@ services:
     environment:
       - NODE_ENV=production
       - SUTOMI_PASSWORD=${SUTOMI_PASSWORD:?set SUTOMI_PASSWORD in .env}
+      - EVENTHORIZON_API_TOKEN=${EVENTHORIZON_API_TOKEN:-}
     volumes:
       - sutomi-data:/app/data
     networks:

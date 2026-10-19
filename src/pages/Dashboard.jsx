@@ -6,7 +6,7 @@ const tools = [
   { name: 'Thinking machine', description: 'guided thinking - problem framing & hypothesis testing', path: '/tools/thinking' },
   { name: 'projects', description: 'manage and view my projects' },
   { name: 'tasks', description: 'create tasklists' },
-  { name: 'event horizon', description: 'control the future - become a master of time' },
+  { name: 'event horizon', description: 'control the future - become a master of time', path: '/tools/eventhorizon' },
 ]
 
 export default function Dashboard() {

@@ -27,6 +27,7 @@ Logged-in tools live under `src/tools/<name>/` as self-contained modules (compon
 
 - **QR Creator** (`/tools/qr`) — turn a URL, text, or `lat,lon` into a QR code, download as SVG or PNG. Generated entirely in the browser.
 - **Thinking Machine** (`/tools/thinking`) — a guided, non-AI sequence of questions: state an aim, uncover the smaller questions behind it, work on one at a time (clarify, find out, explore options, decide, test, or do), record what you learn and what it means for the aim, then export a brief in your own words. Questions live in `src/tools/thinking/flow.js`; briefs are saved server-side.
+- **Event Horizon** (`/tools/eventhorizon`) — a window onto the Event Horizon services: a scripted (non-AI) chat interview that turns life's predictable events into preparation chains, and a calendar (month grid, list, chain detail, tick-off tasks) over the resulting map. sutomi only proxies the two services (`server/eventhorizon.js`); set `EVENTHORIZON_API_TOKEN` in `.env` on the server.
 
 ## Deployment
 
@@ -40,4 +41,5 @@ ssh dedibox "cd /data/sutomi && docker compose up -d --build"
 | Variable | Description |
 |---|---|
 | `SUTOMI_PASSWORD` | Password for login and article management |
+| `EVENTHORIZON_API_TOKEN` | Bearer token for the Event Horizon services (proxied by `server/eventhorizon.js`; optional, the tool just reports the services as unreachable without it) |
 | `PORT` | Server port (default: 3000) |
