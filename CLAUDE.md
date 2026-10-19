@@ -15,14 +15,17 @@ Personal website for Alexander Miller. React + Express, deployed via Docker on d
 - No cookies, no tracking, no popups — this is a core principle
 - Articles stored server-side in JSON file (`/app/data/articles.json` inside Docker volume)
 - Article IDs are URL slugs generated from titles (up to 30 chars), auto-update on title change
+- `data/articles.json` is the live store on the server (docker volume `sutomi-data`, path `/app/data` in the container); the server reads it on every request, so a one-off fix can be made in place with `docker exec sutomi node -e …` after copying a `.bak-<timestamp>` beside it — no restart needed
 - Welcome message is a special article with `type: 'welcome'`
 
 ## Architecture
 - Home page (`/`) and article view (`/article/:slug`) share a single component (`Home.jsx`) with animated transitions
 - Transition phases: list -> step1 (collapse/grow) -> step2 (unroll) -> open, and reverse
 - Unroll uses `clip-path` for a sheet-laying-down effect
-- Right-click context menu in article editor for links and images (no toolbar)
+- Right-click context menu in article editor (`src/components/RichEditor.jsx`, no toolbar): with text selected it offers **heading** (`<h2>`, 24px bold), **subheading** (`<h3>`, 20px bold), **body text** (`<p>`), **italic**, **clear formatting**, then link; on a link/image, edit/remove. Styles live in `App.css` under "Article text styles" and apply identically to the editor and the page (`.editor-body`, `.body-full`, `.article-body`); an open article's title is bold like a heading. Enter makes a `<p>` (`defaultParagraphSeparator`)
+- Pasted HTML is rebuilt by `cleanHtml()` to the article vocabulary only (p, br, h2, h3, b/strong, i/em, a[href], img[src], lists, blockquote; h1→h2, div→p, spans and inline styles dropped) — pasting from a word processor used to bring `style=` attributes that broke spacing and couldn't be deleted in place
 - Native browser spellcheck preserved — custom menu only appears on text selection, links, or images
+- Article lists come back newest first: `GET /api/articles` and `/api/articles/all` sort by `date` (dd/mm/yyyy string) descending, same-day articles by creation order descending; the file itself stays in creation order
 - Auth uses Bearer token (SUTOMI_PASSWORD env var), session stored in sessionStorage
 - **Dashboard tools are modular:** each lives in its own folder under `src/tools/<name>/` (page component + pure logic + its own CSS), is routed at `/tools/<name>` in `App.jsx` (logged in only), and is linked from the `tools` array in `Dashboard.jsx`. Add new tools the same way; keep them self-contained and avoid touching `App.css`
 - QR Creator (`src/tools/qr/`) generates codes client-side with the `qrcode` npm package — no server endpoint, nothing leaves the browser. Logic ported from `~/Projects/qr-creator` (Python); preview is brown-on-cream, downloads are black-on-white SVG/PNG

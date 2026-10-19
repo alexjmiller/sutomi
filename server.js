@@ -70,15 +70,22 @@ app.get('/api/welcome', (_req, res) => {
   res.json(welcome || null)
 })
 
+// Newest first: by date (dd/mm/yyyy), same-day articles in reverse creation order. The file keeps creation order.
+const dateKey = (d) => (typeof d === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(d) ? d.slice(6) + d.slice(3, 5) + d.slice(0, 2) : '')
+const newestFirst = (articles) => articles
+  .map((a, i) => [a, i])
+  .sort(([a, i], [b, j]) => dateKey(b.date).localeCompare(dateKey(a.date)) || j - i)
+  .map(([a]) => a)
+
 // Public: get live articles (excluding welcome)
 app.get('/api/articles', (_req, res) => {
   const articles = readArticles().filter((a) => a.live && a.type !== 'welcome')
-  res.json(articles.map(withPreview))
+  res.json(newestFirst(articles).map(withPreview))
 })
 
 // Auth: get all articles (including drafts)
 app.get('/api/articles/all', auth, (_req, res) => {
-  res.json(readArticles())
+  res.json(newestFirst(readArticles()))
 })
 
 // Auth: create article

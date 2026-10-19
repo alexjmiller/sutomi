@@ -1,11 +1,42 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 
+// What pasted HTML may keep: the article's own vocabulary, nothing else (no inline styles, no spans).
+const KEEP = new Set(['P', 'BR', 'H2', 'H3', 'B', 'STRONG', 'I', 'EM', 'A', 'IMG', 'UL', 'OL', 'LI', 'BLOCKQUOTE'])
+const RENAME = { H1: 'H2', H4: 'H3', H5: 'H3', H6: 'H3', DIV: 'P' }
+
+/** Rebuild pasted markup with only the tags and attributes the editor understands. */
+export function cleanHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const walk = (node) => {
+    let out = ''
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { out += child.textContent.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); continue }
+      if (child.nodeType !== 1) continue
+      let tag = RENAME[child.tagName] || child.tagName
+      if (tag === 'IMG') { out += child.src ? `<img src="${child.getAttribute('src')}" alt="">` : ''; continue }
+      if (tag === 'BR') { out += '<br>'; continue }
+      const inner = walk(child)
+      if (!KEEP.has(tag)) { out += inner; continue }
+      if (tag === 'A') { out += child.getAttribute('href') ? `<a href="${child.getAttribute('href')}" target="_blank" rel="noopener">${inner}</a>` : inner; continue }
+      if (!inner.trim() && tag !== 'LI') continue // drop empty blocks that pasting leaves behind
+      out += `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`
+    }
+    return out
+  }
+  return walk(doc.body)
+}
+
 export default function RichEditor({ value, onChange, placeholder }) {
   const editorRef = useRef(null)
   const [menu, setMenu] = useState(null)
   const [inputMode, setInputMode] = useState(null) // 'link' | 'image'
   const [inputUrl, setInputUrl] = useState('')
   const savedSelection = useRef(null)
+
+  useEffect(() => {
+    // Enter makes a new <p>, like every existing article, rather than the browser's <div>
+    try { document.execCommand('defaultParagraphSeparator', false, 'p') } catch { /* older engines */ }
+  }, [])
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -15,6 +46,27 @@ export default function RichEditor({ value, onChange, placeholder }) {
 
   function handleInput() {
     onChange(editorRef.current.innerHTML)
+  }
+
+  function handlePaste(e) {
+    const html = e.clipboardData.getData('text/html')
+    const text = e.clipboardData.getData('text/plain')
+    if (!html && !text) return
+    e.preventDefault()
+    const clean = html ? cleanHtml(html) : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, '<br>')}</p>`).join('')
+    document.execCommand('insertHTML', false, clean)
+    handleInput()
+  }
+
+  /** Block styles for the selected lines, and italic for the selected words. */
+  function applyFormat(kind) {
+    restoreSelection()
+    editorRef.current.focus()
+    if (kind === 'italic') document.execCommand('italic')
+    else if (kind === 'clear') { document.execCommand('removeFormat'); document.execCommand('formatBlock', false, 'p') }
+    else document.execCommand('formatBlock', false, kind)
+    handleInput()
+    closeMenu()
   }
 
   function saveSelection() {
@@ -178,6 +230,7 @@ export default function RichEditor({ value, onChange, placeholder }) {
         className="editor-body"
         contentEditable
         onInput={handleInput}
+        onPaste={handlePaste}
         onContextMenu={handleContextMenu}
         data-placeholder={placeholder}
         suppressContentEditableWarning
@@ -201,6 +254,16 @@ export default function RichEditor({ value, onChange, placeholder }) {
             </form>
           ) : (
             <>
+              {menu.hasSelection && (
+                <>
+                  <button className="context-menu-item" onClick={() => applyFormat('h2')}>heading</button>
+                  <button className="context-menu-item" onClick={() => applyFormat('h3')}>subheading</button>
+                  <button className="context-menu-item" onClick={() => applyFormat('p')}>body text</button>
+                  <button className="context-menu-item" onClick={() => applyFormat('italic')}>italic</button>
+                  <button className="context-menu-item" onClick={() => applyFormat('clear')}>clear formatting</button>
+                  <hr className="context-menu-rule" />
+                </>
+              )}
               {(menu.hasSelection || menu.existingLink) && (
                 <button className="context-menu-item" onClick={handleAddLink}>
                   {menu.existingLink ? 'edit link' : 'add link'}
