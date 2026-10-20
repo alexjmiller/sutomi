@@ -1,6 +1,12 @@
 /* Tasklists — llli.st's layout (underline entry, hover-tinted rows, flag · circle · text · actions)
    in sutomi's handwriting: cream, brown 2px lines, red for links and danger. */
-.tl { max-width: 640px; }
+.tl {
+  max-width: 640px;
+  /* Lines are drawn, not ruled: a gently wobbling pencil stroke with faint graphite grain, tiled along the edge */
+  --tl-line: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='320'%20height='6'%20viewBox='0%200%20320%206'%3E%3Cpath%20d='M0%203.2C40%202.3%2080%203.9%20120%203.1S200%202.5%20240%203.4%20300%203.7%20320%203.2'%20fill='none'%20stroke='%2346413d'%20stroke-width='1.5'%20stroke-linecap='round'%20opacity='.9'/%3E%3Cpath%20d='M0%203.9C40%203.1%2080%204.5%20120%203.8S200%203.2%20240%204.1%20300%204.3%20320%203.9'%20fill='none'%20stroke='%2346413d'%20stroke-width='.7'%20stroke-dasharray='11%203%2017%202%207%204'%20opacity='.35'/%3E%3C/svg%3E");
+  --tl-line-red: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='320'%20height='6'%20viewBox='0%200%20320%206'%3E%3Cpath%20d='M0%203.2C40%202.3%2080%203.9%20120%203.1S200%202.5%20240%203.4%20300%203.7%20320%203.2'%20fill='none'%20stroke='%23d4532b'%20stroke-width='1.5'%20stroke-linecap='round'%20opacity='.9'/%3E%3Cpath%20d='M0%203.9C40%203.1%2080%204.5%20120%203.8S200%203.2%20240%204.1%20300%204.3%20320%203.9'%20fill='none'%20stroke='%23d4532b'%20stroke-width='.7'%20stroke-dasharray='11%203%2017%202%207%204'%20opacity='.35'/%3E%3C/svg%3E");
+}
+.tl-line { background: var(--tl-line) repeat-x left bottom / 320px 6px; }
 .tl-intro { margin: 8px 0 24px; opacity: 0.8; }
 .tl-muted { color: #46413d99; font-size: 16px; }
 
@@ -18,13 +24,13 @@
 .tl-input {
   flex: 1;
   min-width: 0;
-  padding: 4px 0;
+  padding: 4px 0 6px;
   border: none;
-  border-bottom: 2px solid #46413d;
   outline: none;
+  background: var(--tl-line) repeat-x left bottom / 320px 6px;
 }
 .tl-input::placeholder { color: #46413d80; }
-.tl-input:focus-visible { border-bottom-color: #d4532b; }
+.tl-input:focus-visible { background-image: var(--tl-line-red); }
 
 .tl-text-btn { border: none; padding: 4px 0; cursor: pointer; }
 .tl-text-btn:hover, .tl-text-btn:focus-visible { color: #d4532b; }
@@ -33,7 +39,7 @@
 
 /* Index of lists */
 .tl-lists { list-style: none; padding: 0; margin: 0; }
-.tl-lists-item { border-bottom: 2px solid #46413d; }
+.tl-lists-item { background: var(--tl-line) repeat-x left bottom / 320px 6px; padding-bottom: 4px; }
 .tl-lists-row { align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: 10px 0; }
 .tl-lists-name { font-size: 20px; color: #46413d; text-decoration: none; flex: 1; min-width: 0; }
 .tl-lists-name:hover { color: #d4532b; }
@@ -70,24 +76,15 @@
 .tl-flag-low { opacity: 0; transition: opacity 0.15s; }
 .tl-item:hover .tl-flag-low, .tl-flag:focus-visible .tl-flag-low { opacity: 1; }
 
-/* Circle checkbox: brown ring, filled when done */
-.tl-check {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 2px solid #46413d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  line-height: 1;
-  color: #faf5e4;
-  cursor: pointer;
-  transition: border-color 0.2s, background-color 0.2s;
-}
-.tl-check:hover, .tl-check:focus-visible { border-color: #d4532b; }
-.tl-item.done .tl-check { background: #46413d; }
+/* Circle checkbox: a pencilled ring (slightly off-round, overlapping where the stroke closes), filled in when done */
+.tl-check { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; }
+.tl-check svg { width: 22px; height: 22px; display: block; overflow: visible; }
+.tl-check .ring { fill: none; stroke: #46413d; stroke-width: 1.6; stroke-linecap: round; transition: stroke 0.2s, fill 0.2s; }
+.tl-check .grain { fill: none; stroke: #46413d; stroke-width: 0.6; opacity: 0.35; stroke-dasharray: 5 2 9 1; }
+.tl-check .tick { fill: none; stroke: #faf5e4; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tl-check:hover .ring, .tl-check:focus-visible .ring { stroke: #d4532b; }
+.tl-item.done .tl-check .ring { fill: #46413d; }
+.tl-item.done .tl-check .grain { display: none; }
 
 /* Item text is an input, edited in place: no border until focused, then a red underline */
 .tl-text {
@@ -103,7 +100,7 @@
   border-radius: 0;
   outline: none;
 }
-.tl-text:focus { border-bottom-color: #d4532b; }
+.tl-text:focus { border-bottom-color: transparent; background: var(--tl-line-red) repeat-x left bottom / 320px 6px; }
 .tl-item.done .tl-text { text-decoration: line-through; color: #46413d80; }
 
 /* Row actions appear on hover (always on touch widths) */

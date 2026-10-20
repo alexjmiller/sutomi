@@ -256,7 +256,7 @@ function Row({ item, onChange, focusAdd }) {
           onClick={tick}
           onKeyDown={keyAct(tick)}
         >
-          {item.done ? '✓' : ''}
+          <Circle done={item.done} />
         </span>
         <input
           className="tl-text"
@@ -273,6 +273,18 @@ function Row({ item, onChange, focusAdd }) {
         </span>
       </div>
     </li>
+  )
+}
+
+// The tick circle, drawn by hand: a slightly off-round ring whose stroke overlaps where it closes.
+const RING = 'M12.3 2.5C17.4 2.1 21.7 6.5 21.4 12.2 21.1 17.7 16.9 21.6 11.7 21.4 6.3 21.2 2.4 17.1 2.6 11.8 2.8 6.4 7.1 2.9 12 2.6 12.4 2.6 12.9 2.7 13.3 2.8'
+function Circle({ done }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path className="ring" d={RING} />
+      <path className="grain" d={RING} transform="translate(0.5 0.4)" />
+      {done && <path className="tick" d="M7.8 12.4 11 15.6 16.6 9" />}
+    </svg>
   )
 }
 
