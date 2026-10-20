@@ -340,6 +340,17 @@
   font-size: 16px;
 }
 
+.login-hint {
+  color: #46413d99;
+  font-size: 16px;
+  max-width: 420px;
+}
+
+.login-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Intro */
 .intro {
   margin-bottom: 32px;

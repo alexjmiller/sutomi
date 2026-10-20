@@ -40,7 +40,8 @@ ssh dedibox "cd /data/sutomi && docker compose up -d --build"
 
 | Variable | Description |
 |---|---|
-| `SUTOMI_PASSWORD` | Password for login and article management |
+| `SUTOMI_PASSWORD` | Bootstrap only: signs in while no passkey is registered, so the first one can be added. Sign-in is otherwise by passkey (Touch ID / Face ID), managed at `/tools/passkeys`. Lost every device? Delete `passkeys.json` in the data volume to reopen password sign-in |
+| `SUTOMI_RP_ID`, `SUTOMI_ORIGIN` | WebAuthn relying-party id and allowed origin(s) (defaults: `sutomi.net` / `https://sutomi.net` in production, `localhost` and the two local dev origins otherwise) |
 | `EVENTHORIZON_API_TOKEN` | Bearer token for the Event Horizon services, Default space (proxied by `server/eventhorizon.js`; optional, the tool just reports the services as unreachable without it) |
 | `EVENTHORIZON_TEST_TOKEN` | Token for the Event Horizon Test space (optional; the Test option is disabled without it) |
 | `PORT` | Server port (default: 3000) |

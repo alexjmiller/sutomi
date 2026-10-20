@@ -4,15 +4,41 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { thinkingRouter } from './server/thinking.js'
 import { eventHorizonRouter } from './server/eventhorizon.js'
+import { authRouter } from './server/auth.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3000
-const DATA_FILE = join(__dirname, 'data', 'articles.json')
-const PASSWORD = process.env.SUTOMI_PASSWORD || 'sutomi'
+const DATA_DIR = join(__dirname, 'data')
+const DATA_FILE = join(DATA_DIR, 'articles.json')
+// Sign-in is by passkey (server/auth.js). SUTOMI_PASSWORD only enrols the first one.
+const { router: authRoutes, requireAuth: auth, origins } = authRouter({ dataDir: DATA_DIR, password: process.env.SUTOMI_PASSWORD || '' })
+
+app.set('trust proxy', 1) // Traefik in front: req.ip is the visitor, for rate limiting
+app.disable('x-powered-by')
+
+// Browser hardening. Articles render stored HTML, so scripts may only come from our own bundle;
+// images may be hosted anywhere (articles link to them) and blobs are the QR downloads.
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' https: data: blob:",
+    "font-src 'self'", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+  ].join('; '))
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('X-Frame-Options', 'DENY')
+  if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000')
+  // Writes must come from our own pages (the session cookie is SameSite=Strict too; belt and braces).
+  if (req.path.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origin = req.headers.origin
+    if (!origin || !origins.includes(origin)) return res.status(403).json({ error: 'cross-site request refused' })
+  }
+  next()
+})
 
 app.use(express.json({ limit: '2mb' })) // interview state round-trips whole compiled plans
 app.use(express.static(join(__dirname, 'dist')))
+app.use('/api/auth', authRoutes)
 
 function readArticles() {
   if (!existsSync(DATA_FILE)) return []
@@ -54,14 +80,6 @@ function makePreview(body, maxLen = 200) {
 
 function withPreview(article) {
   return { ...article, preview: makePreview(article.body) }
-}
-
-function auth(req, res, next) {
-  const token = req.headers.authorization
-  if (token !== `Bearer ${PASSWORD}`) {
-    return res.status(401).json({ error: 'unauthorized' })
-  }
-  next()
 }
 
 // Public: get welcome message
@@ -131,18 +149,8 @@ app.delete('/api/articles/:id', auth, (req, res) => {
   res.json({ ok: true })
 })
 
-// Auth: login check
-app.post('/api/login', (req, res) => {
-  const { password } = req.body
-  if (password === PASSWORD) {
-    res.json({ name: 'Alex', token: PASSWORD })
-  } else {
-    res.status(401).json({ error: 'wrong password' })
-  }
-})
-
 // Tools (auth): Thinking Machine briefs
-app.use('/api/thinking', auth, thinkingRouter(join(__dirname, 'data', 'thinking.json')))
+app.use('/api/thinking', auth, thinkingRouter(join(DATA_DIR, 'thinking.json')))
 app.use('/api/eh', auth, eventHorizonRouter())
 
 // SPA fallback

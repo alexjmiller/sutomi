@@ -1,0 +1,32 @@
+/* Passkeys tool — same cream/brown vocabulary as the login form */
+.pk-intro { max-width: 560px; margin: 16px 0 24px; }
+.pk-muted { color: #46413d99; font-size: 16px; margin-top: 24px; max-width: 560px; }
+.pk-warning { color: #d4532b; margin-bottom: 16px; max-width: 560px; }
+
+.pk-list { list-style: none; padding: 0; margin: 0 0 32px; max-width: 560px; }
+.pk-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 2px solid #46413d;
+}
+.pk-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pk-name { font-size: 20px; }
+.pk-meta { font-size: 15px; color: #46413d99; }
+.pk-confirm { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; }
+
+.pk-text {
+  font-family: 'Alexabet5', monospace;
+  font-size: 16px;
+  color: #d4532b;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.pk-text:disabled { opacity: 0.5; cursor: default; }
+
+.pk-add { display: flex; flex-direction: column; gap: 16px; max-width: 300px; }

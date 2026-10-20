@@ -1,6 +1,8 @@
 // Event Horizon — API client. Everything goes through sutomi's proxy (/api/eh) behind login.
 // The chosen space (Default = the real map, Test = a sandbox) travels as a header; the proxy
 // turns it into the right token.
+import { notifyUnauthorized } from '../../auth'
+
 const API = '/api/eh'
 const SPACE_KEY = 'eh_space'
 export const SPACES = ['default', 'test']
@@ -17,14 +19,12 @@ export function setSpace(space) {
   try { localStorage.setItem(SPACE_KEY, space) } catch { /* ignore */ }
 }
 
-function authHeaders() {
-  const user = sessionStorage.getItem('sutomi_user')
-  const token = user ? JSON.parse(user).token : ''
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-EH-Space': getSpace() }
-}
+// The sutomi session is a cookie; only the chosen space travels as a header.
+const headers = () => ({ 'Content-Type': 'application/json', 'X-EH-Space': getSpace() })
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API}${path}`, { ...options, headers: authHeaders() })
+  const res = await fetch(`${API}${path}`, { ...options, headers: headers() })
+  if (res.status === 401) notifyUnauthorized()
   const text = await res.text()
   let data = null
   try { data = text ? JSON.parse(text) : null } catch { data = null }

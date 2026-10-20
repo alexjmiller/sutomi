@@ -23,5 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local tool data (thinking machine briefs)
+# Local tool data (thinking machine briefs, passkeys, sessions)
 data/thinking.json
+data/passkeys.json
+data/sessions.json
+
+# secrets (Event Horizon tokens etc.)
+.env

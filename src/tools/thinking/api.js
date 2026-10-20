@@ -1,14 +1,11 @@
-// Thinking Machine — API client. Briefs are stored server-side behind login.
+// Thinking Machine — API client. Briefs are stored server-side behind login (the session cookie).
+import { notifyUnauthorized } from '../../auth'
+
 const API = '/api/thinking'
 
-function authHeaders() {
-  const user = sessionStorage.getItem('sutomi_user')
-  const token = user ? JSON.parse(user).token : ''
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-}
-
 async function request(path, options = {}) {
-  const res = await fetch(`${API}${path}`, { ...options, headers: authHeaders() })
+  const res = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json' } })
+  if (res.status === 401) notifyUnauthorized()
   if (!res.ok) throw new Error(`request failed (${res.status})`)
   return res.json()
 }

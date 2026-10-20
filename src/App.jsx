@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -9,23 +9,49 @@ import ManageArticles from './pages/ManageArticles'
 import QrCreator from './tools/qr/QrCreator'
 import ThinkingMachine from './tools/thinking/ThinkingMachine'
 import EventHorizon from './tools/eventhorizon/EventHorizon'
+import Passkeys from './tools/passkeys/Passkeys'
+import { me, logout } from './auth'
 import './App.css'
+
+const USER_KEY = 'sutomi_user' // a display-name cache only; the session itself is an HttpOnly cookie
 
 export default function App() {
   const [user, setUser] = useState(() => {
-    const saved = sessionStorage.getItem('sutomi_user')
-    return saved ? JSON.parse(saved) : null
+    try { const saved = sessionStorage.getItem(USER_KEY); return saved ? JSON.parse(saved) : null } catch { return null }
   })
+  const [checked, setChecked] = useState(false)
+
+  // Ask the server whether the cookie is still good; the cache only avoids a flash.
+  useEffect(() => {
+    let cancelled = false
+    me().then((u) => { if (!cancelled) remember({ name: u.name }) })
+      .catch(() => { if (!cancelled) remember(null) })
+      .finally(() => { if (!cancelled) setChecked(true) })
+    const forget = () => remember(null)
+    window.addEventListener('sutomi:unauthorized', forget)
+    return () => { cancelled = true; window.removeEventListener('sutomi:unauthorized', forget) }
+  }, [])
+
+  function remember(u) {
+    setUser(u)
+    try {
+      if (u) sessionStorage.setItem(USER_KEY, JSON.stringify(u))
+      else sessionStorage.removeItem(USER_KEY)
+    } catch { /* ignore */ }
+  }
 
   function handleLogin(u) {
-    setUser(u)
-    sessionStorage.setItem('sutomi_user', JSON.stringify(u))
+    remember({ name: u.name })
+    setChecked(true)
   }
 
-  function handleLogout() {
-    setUser(null)
-    sessionStorage.removeItem('sutomi_user')
+  async function handleLogout() {
+    try { await logout() } catch { /* the cookie is gone either way */ }
+    remember(null)
   }
+
+  // Signed-in pages wait for the cookie check rather than bouncing to login on a fresh tab.
+  const gate = (page) => (user ? page : checked ? <Navigate to="/login" /> : null)
 
   return (
     <BrowserRouter>
@@ -34,13 +60,14 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/article/:id" element={<Home />} />
-          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} />
-          <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-          <Route path="/articles" element={user ? <ManageArticles /> : <Navigate to="/login" />} />
-          <Route path="/tools/qr" element={user ? <QrCreator /> : <Navigate to="/login" />} />
-          <Route path="/tools/thinking" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
-          <Route path="/tools/thinking/:id" element={user ? <ThinkingMachine /> : <Navigate to="/login" />} />
-          <Route path="/tools/eventhorizon/*" element={user ? <EventHorizon /> : <Navigate to="/login" />} />
+          <Route path="/login" element={<Login user={user} onLogin={handleLogin} />} />
+          <Route path="/dashboard" element={gate(<Dashboard />)} />
+          <Route path="/articles" element={gate(<ManageArticles />)} />
+          <Route path="/tools/qr" element={gate(<QrCreator />)} />
+          <Route path="/tools/thinking" element={gate(<ThinkingMachine />)} />
+          <Route path="/tools/thinking/:id" element={gate(<ThinkingMachine />)} />
+          <Route path="/tools/eventhorizon/*" element={gate(<EventHorizon />)} />
+          <Route path="/tools/passkeys" element={gate(<Passkeys />)} />
         </Routes>
         <Footer />
       </div>

@@ -7,6 +7,7 @@ const tools = [
   { name: 'projects', description: 'manage and view my projects' },
   { name: 'tasks', description: 'create tasklists' },
   { name: 'event horizon', description: 'control the future - become a master of time', path: '/tools/eventhorizon' },
+  { name: 'passkeys', description: 'the devices that can sign in here', path: '/tools/passkeys' },
 ]
 
 export default function Dashboard() {
