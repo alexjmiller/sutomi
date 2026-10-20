@@ -65,18 +65,24 @@ function setCookie(res, value, maxAgeSeconds) {
   res.setHeader('Set-Cookie', attrs.join('; '))
 }
 
+/** The visitor's address: Cloudflare's header when proxied, else what Express derives behind Traefik. */
+const clientIp = (req) => String(req.headers['cf-connecting-ip'] || req.ip || 'unknown')
+
+/** Sign-in outcomes go to the container log (never the secret itself). */
+const log = (req, what) => console.log(`[auth] ${new Date().toISOString()} ${clientIp(req)} ${what}`)
+
 /** A few attempts per client per window on the sign-in routes; everything else is unmetered. */
 function rateLimiter({ max, windowMs }) {
   const hits = new Map()
   return (req, res, next) => {
-    const key = req.ip || 'unknown'
+    const key = clientIp(req)
     const t = now()
     const entry = hits.get(key) || { count: 0, start: t }
     if (t - entry.start > windowMs) { entry.count = 0; entry.start = t }
     entry.count += 1
     hits.set(key, entry)
     if (hits.size > 5000) for (const [k, e] of hits) if (t - e.start > windowMs) hits.delete(k)
-    if (entry.count > max) return res.status(429).json({ error: 'too many attempts — try again later' })
+    if (entry.count > max) { log(req, `rate limited ${req.path}`); return res.status(429).json({ error: 'too many attempts — try again later' }) }
     next()
   }
 }
@@ -173,11 +179,12 @@ export function authRouter({ dataDir, password }) {
 
   // Bootstrap: the password signs in only while no passkey exists.
   router.post('/password', limited, (req, res) => {
-    if (!passwordOpen()) return res.status(403).json({ error: 'password sign-in is closed — use a passkey' })
+    if (!passwordOpen()) { log(req, 'password sign-in refused: closed'); return res.status(403).json({ error: 'password sign-in is closed — use a passkey' }) }
     const given = Buffer.from(String(req.body?.password || ''))
     const expected = Buffer.from(password)
     const ok = given.length === expected.length && timingSafeEqual(given, expected)
-    if (!ok) return res.status(401).json({ error: 'wrong password' })
+    if (!ok) { log(req, `password sign-in failed (${given.length} chars given, ${expected.length} expected)`); return res.status(401).json({ error: 'wrong password' }) }
+    log(req, 'password sign-in ok')
     createSession(res, 'password')
     res.json(user())
   })
@@ -211,9 +218,11 @@ export function authRouter({ dataDir, password }) {
         requireUserVerification: true,
       })
     } catch (err) {
+      log(req, `passkey sign-in failed: ${err.message}`)
       return res.status(400).json({ error: err.message || 'verification failed' })
     }
-    if (!result.verified) return res.status(401).json({ error: 'not verified' })
+    if (!result.verified) { log(req, 'passkey sign-in not verified'); return res.status(401).json({ error: 'not verified' }) }
+    log(req, `passkey sign-in ok (${stored.name})`)
     stored.counter = result.authenticationInfo.newCounter
     stored.lastUsedAt = now()
     stored.backedUp = result.authenticationInfo.credentialBackedUp
