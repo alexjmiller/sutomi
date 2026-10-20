@@ -5,7 +5,7 @@ const tools = [
   { name: 'QR Creator', description: 'create a quick qr code', path: '/tools/qr' },
   { name: 'Thinking machine', description: 'guided thinking - problem framing & hypothesis testing', path: '/tools/thinking' },
   { name: 'projects', description: 'manage and view my projects' },
-  { name: 'tasks', description: 'create tasklists' },
+  { name: 'tasklists', description: 'simple lists - add, flag, tick, park', path: '/tools/tasklists' },
   { name: 'event horizon', description: 'control the future - become a master of time', path: '/tools/eventhorizon' },
   { name: 'passkeys', description: 'the devices that can sign in here', path: '/tools/passkeys' },
 ]

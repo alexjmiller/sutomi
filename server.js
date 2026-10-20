@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { thinkingRouter } from './server/thinking.js'
+import { collectionRouter } from './server/collection.js'
 import { eventHorizonRouter } from './server/eventhorizon.js'
 import { authRouter } from './server/auth.js'
 
@@ -151,6 +152,7 @@ app.delete('/api/articles/:id', auth, (req, res) => {
 
 // Tools (auth): Thinking Machine briefs
 app.use('/api/thinking', auth, thinkingRouter(join(DATA_DIR, 'thinking.json')))
+app.use('/api/tasklists', auth, collectionRouter(join(DATA_DIR, 'tasklists.json')))
 app.use('/api/eh', auth, eventHorizonRouter())
 
 // SPA fallback

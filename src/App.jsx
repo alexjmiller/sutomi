@@ -10,6 +10,7 @@ import QrCreator from './tools/qr/QrCreator'
 import ThinkingMachine from './tools/thinking/ThinkingMachine'
 import EventHorizon from './tools/eventhorizon/EventHorizon'
 import Passkeys from './tools/passkeys/Passkeys'
+import Tasklists from './tools/tasklists/Tasklists'
 import { me, logout } from './auth'
 import './App.css'
 
@@ -68,6 +69,8 @@ export default function App() {
           <Route path="/tools/thinking/:id" element={gate(<ThinkingMachine />)} />
           <Route path="/tools/eventhorizon/*" element={gate(<EventHorizon />)} />
           <Route path="/tools/passkeys" element={gate(<Passkeys />)} />
+          <Route path="/tools/tasklists" element={gate(<Tasklists />)} />
+          <Route path="/tools/tasklists/:id" element={gate(<Tasklists />)} />
         </Routes>
         <Footer />
       </div>

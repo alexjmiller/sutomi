@@ -27,6 +27,7 @@ Logged-in tools live under `src/tools/<name>/` as self-contained modules (compon
 
 - **QR Creator** (`/tools/qr`) — turn a URL, text, or `lat,lon` into a QR code, download as SVG or PNG. Generated entirely in the browser.
 - **Thinking Machine** (`/tools/thinking`) — a guided, non-AI sequence of questions: state an aim, uncover the smaller questions behind it, work on one at a time (clarify, find out, explore options, decide, test, or do), record what you learn and what it means for the aim, then export a brief in your own words. Questions live in `src/tools/thinking/flow.js`; briefs are saved server-side.
+- **Tasklists** (`/tools/tasklists`) — simple lists in the spirit of llli.st (`~/Projects/listicles`): add an item, flag it low / medium / high, tick it off, park it for later, delete it; ticked items fade out a day later. Any number of lists, stored server-side.
 - **Event Horizon** (`/tools/eventhorizon`) — a window onto the Event Horizon services: a scripted (non-AI) chat interview that turns life's predictable events into preparation chains (any question can be put aside with "later" and picked up from the home page when you have the details), with each event's chain editable on its map card before it is added, and a calendar (month grid, list, day view, chain detail, tick-off tasks) over the resulting map. sutomi only proxies the two services (`server/eventhorizon.js`); set `EVENTHORIZON_API_TOKEN` in `.env` on the server.
 
 ## Deployment

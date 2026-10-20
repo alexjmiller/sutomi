@@ -25,6 +25,7 @@ dist-ssr
 
 # Local tool data (thinking machine briefs, passkeys, sessions)
 data/thinking.json
+data/tasklists.json
 data/passkeys.json
 data/sessions.json
 

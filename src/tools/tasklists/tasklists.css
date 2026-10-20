@@ -1,0 +1,115 @@
+/* Tasklists — llli.st's layout (underline entry, hover-tinted rows, flag · circle · text · actions)
+   in sutomi's handwriting: cream, brown 2px lines, red for links and danger. */
+.tl { max-width: 640px; }
+.tl-intro { margin: 8px 0 24px; opacity: 0.8; }
+.tl-muted { color: #46413d99; font-size: 16px; }
+
+.tl-input,
+.tl-text-btn,
+.tl-action {
+  font-family: 'Alexabet5', monospace;
+  font-size: 18px;
+  color: #46413d;
+  background: transparent;
+}
+
+/* Quick-entry form: underline only, red on focus */
+.tl-add { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.tl-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  border: none;
+  border-bottom: 2px solid #46413d;
+  outline: none;
+}
+.tl-input::placeholder { color: #46413d80; }
+.tl-input:focus-visible { border-bottom-color: #d4532b; }
+
+.tl-text-btn { border: none; padding: 4px 0; cursor: pointer; }
+.tl-text-btn:hover, .tl-text-btn:focus-visible { color: #d4532b; }
+.tl-text-btn.quiet { font-size: 16px; color: #46413d99; }
+.tl-text-btn.danger { color: #d4532b; }
+
+/* Index of lists */
+.tl-lists { list-style: none; padding: 0; margin: 0; }
+.tl-lists-item {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 2px solid #46413d;
+}
+.tl-lists-name { font-size: 20px; color: #46413d; text-decoration: none; flex: 1; min-width: 0; }
+.tl-lists-name:hover { color: #d4532b; }
+.tl-confirm { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 16px; }
+
+/* List page */
+.tl-title { cursor: text; }
+.tl-title:hover { text-decoration: underline dotted; }
+.tl-rename { font-size: 28px; margin: 0 0 16px; max-width: 480px; }
+
+.tl-items { list-style: none; padding: 0; margin: 0; }
+.tl-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  transition: background-color 0.3s;
+}
+.tl-item:hover { background: #46413d0d; }
+
+/* Priority flag slot: low only shows on row hover */
+.tl-flag { width: 14px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.tl-flag.inert { cursor: default; }
+.tl-flag svg { width: 14px; height: 20px; display: block; }
+.tl-flag-low { opacity: 0; transition: opacity 0.15s; }
+.tl-item:hover .tl-flag-low, .tl-flag:focus-visible .tl-flag-low { opacity: 1; }
+
+/* Circle checkbox: brown ring, filled when done */
+.tl-check {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid #46413d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: #faf5e4;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.tl-check:hover, .tl-check:focus-visible { border-color: #d4532b; }
+.tl-item.done .tl-check { background: #46413d; }
+
+.tl-text { flex: 1; min-width: 0; padding: 2px 0; font-size: 18px; word-break: break-word; }
+.tl-item.done .tl-text { text-decoration: line-through; color: #46413d80; }
+
+/* Row actions appear on hover (always on touch widths) */
+.tl-actions { display: flex; flex-shrink: 0; }
+.tl-action { font-size: 16px; padding: 2px 8px; border: none; color: transparent; cursor: pointer; transition: color 0.15s; }
+.tl-item:hover .tl-action, .tl-action:focus-visible { color: #46413d99; }
+.tl-item:hover .tl-action.park:hover { color: #46413d; }
+.tl-item:hover .tl-action.delete:hover { color: #d4532b; }
+
+.tl-parked { margin-top: 36px; }
+.tl-parked-heading {
+  font-size: 14px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #46413d99;
+  margin: 0 0 6px;
+}
+.tl-parked .tl-text { color: #46413dbb; }
+
+.tl-foot { margin-top: 40px; }
+
+@media (max-width: 480px) {
+  .tl-action { color: #46413d99; }
+  .tl-flag-low { opacity: 1; }
+}
