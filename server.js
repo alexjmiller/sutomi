@@ -6,6 +6,7 @@ import { thinkingRouter } from './server/thinking.js'
 import { tasklistsRouter } from './server/tasklists.js'
 import { eventHorizonRouter } from './server/eventhorizon.js'
 import { authRouter } from './server/auth.js'
+import { shareHandler } from './server/share.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -38,7 +39,7 @@ app.use((req, res, next) => {
 })
 
 app.use(express.json({ limit: '2mb' })) // interview state round-trips whole compiled plans
-app.use(express.static(join(__dirname, 'dist')))
+app.use(express.static(join(__dirname, 'dist'), { index: false })) // `/` goes through the share handler below
 app.use('/api/auth', authRoutes)
 
 function readArticles() {
@@ -155,10 +156,8 @@ app.use('/api/thinking', auth, thinkingRouter(join(DATA_DIR, 'thinking.json')))
 app.use('/api/tasklists', auth, tasklistsRouter(join(DATA_DIR, 'tasklists.json')))
 app.use('/api/eh', auth, eventHorizonRouter())
 
-// SPA fallback
-app.get('/{*splat}', (_req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'))
-})
+// SPA fallback — index.html with social-preview tags for the page being shared (server/share.js)
+app.get('/{*splat}', shareHandler({ indexFile: join(__dirname, 'dist', 'index.html'), origin: origins[0], readArticles }))
 
 app.listen(PORT, () => {
   console.log(`sutomi running on port ${PORT}`)
