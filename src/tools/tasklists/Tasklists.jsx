@@ -1,9 +1,11 @@
 // Tasklists — the llli.st list (~/Projects/listicles) as a sutomi tool, several lists, stored server-side.
 // Add an item, flag its priority, tick it off, park it, delete it. Ticked items fade out after a day.
+// Each action is one op: applied locally at once, sent to the server, which merges it into the stored
+// list and answers with the result — so two devices on the same list don't overwrite each other.
 import { useState, useEffect, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { listLists, getList, createList, saveList, deleteList } from './api'
-import { split, summary, priorityOf, addItem, toggle, cyclePriority, setParked, remove } from './lists'
+import { listLists, getList, createList, deleteList, patchList } from './api'
+import { split, summary, priorityOf, applyOp, opAdd, opToggle, opCycle, opPark, opRemove } from './lists'
 import './tasklists.css'
 
 export default function Tasklists() {
@@ -101,26 +103,31 @@ function ListPage({ id }) {
     getList(id).then(setList).catch(() => setError("couldn't load this list"))
   }, [id])
 
-  // Re-render when the tab regains focus so items that have aged out disappear without a reload.
+  // When the tab comes back: fetch what other devices may have changed, and let aged-out items go.
   useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === 'visible') setNow(Date.now()) }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      setNow(Date.now())
+      getList(id).then(setList).catch(() => { /* keep what we have */ })
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  }, [id])
 
-  /** Apply a change locally at once, then save the whole list. */
-  function update(next) {
-    const updated = { ...list, ...next }
-    setList(updated)
-    saveList(id, { name: updated.name, items: updated.items }).catch(() => setError("couldn't save — check your connection"))
+  /** Show the change at once, send it, then adopt the server's merged list. */
+  function send(body) {
+    setError('')
+    if (body.ops) setList((l) => ({ ...l, items: body.ops.reduce(applyOp, l.items || []) }))
+    if (body.name) setList((l) => ({ ...l, name: body.name }))
+    patchList(id, body).then(setList).catch(() => setError("couldn't save — check your connection"))
   }
-  const change = (fn) => update({ items: fn(list.items || []) })
+  const change = (op) => send({ ops: [op] })
 
   function add(e) {
     e.preventDefault()
     const t = text.trim()
     if (!t) return
-    change((items) => addItem(items, t))
+    change(opAdd(t))
     setText('')
     inputRef.current?.focus()
   }
@@ -128,7 +135,7 @@ function ListPage({ id }) {
   function saveName() {
     const value = renaming.trim()
     setRenaming(null)
-    if (value && value !== list.name) update({ name: value })
+    if (value && value !== list.name) send({ name: value })
   }
 
   async function destroy() {
@@ -189,8 +196,8 @@ function ListPage({ id }) {
 function Row({ item, onChange }) {
   const priority = priorityOf(item)
   const keyAct = (fn) => (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); fn() } }
-  const cycle = () => onChange((items) => cyclePriority(items, item.id))
-  const tick = () => onChange((items) => toggle(items, item.id))
+  const cycle = () => onChange(opCycle(item))
+  const tick = () => onChange(opToggle(item))
   return (
     <li className={`tl-item${item.done ? ' done' : ''}`}>
       {item.done ? (
@@ -221,10 +228,8 @@ function Row({ item, onChange }) {
       </span>
       <span className="tl-text">{item.text}</span>
       <span className="tl-actions">
-        {item.parked
-          ? <button type="button" className="tl-action park" onClick={() => onChange((items) => setParked(items, item.id, false))}>unpark</button>
-          : <button type="button" className="tl-action park" onClick={() => onChange((items) => setParked(items, item.id, true))}>park</button>}
-        <button type="button" className="tl-action delete" onClick={() => onChange((items) => remove(items, item.id))}>delete</button>
+        <button type="button" className="tl-action park" onClick={() => onChange(opPark(item, !item.parked))}>{item.parked ? 'unpark' : 'park'}</button>
+        <button type="button" className="tl-action delete" onClick={() => onChange(opRemove(item))}>delete</button>
       </span>
     </li>
   )

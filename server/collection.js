@@ -1,12 +1,12 @@
 // A JSON-file collection behind auth: whole objects in, whole objects out. The server owns
 // id / createdAt / updatedAt; the client owns the shape. Used by the Thinking Machine (briefs)
-// and the tasklists tool (lists).
+// and the tasklists tool (lists). `extend(router, { readAll, writeAll })` adds routes of its own.
 import { Router } from 'express'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 import { randomBytes } from 'crypto'
 
-export function collectionRouter(dataFile) {
+export function collectionRouter(dataFile, extend) {
   const router = Router()
 
   function readAll() {
@@ -55,5 +55,6 @@ export function collectionRouter(dataFile) {
     res.json({ ok: true })
   })
 
+  if (extend) extend(router, { readAll, writeAll })
   return router
 }

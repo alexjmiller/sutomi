@@ -15,3 +15,5 @@ export const getList = (id) => request(`/${id}`)
 export const createList = (data) => request('', { method: 'POST', body: JSON.stringify(data) })
 export const saveList = (id, data) => request(`/${id}`, { method: 'PUT', body: JSON.stringify(data) })
 export const deleteList = (id) => request(`/${id}`, { method: 'DELETE' })
+/** Merge item ops (and/or a new name) into the stored list; returns the merged list. */
+export const patchList = (id, body) => request(`/${id}`, { method: 'PATCH', body: JSON.stringify(body) })

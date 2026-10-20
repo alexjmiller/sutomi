@@ -2,6 +2,10 @@
 //
 // An item is { id, text, createdAt, done, doneAt?, priority?, parked? }. `priority` is 'medium' or
 // 'high' (absent = low). Ticked items vanish from view a day after being ticked but stay stored.
+// Changes are expressed as ops (server/listops.js) so the server can merge edits from several devices;
+// the builders below make the op for each action, and `applyOp` previews it locally.
+
+export { applyOp, applyOps } from '../../../server/listops.js'
 
 export const HIDE_DONE_AFTER_MS = 24 * 60 * 60 * 1000
 export const PRIORITIES = ['low', 'medium', 'high']
@@ -31,28 +35,15 @@ export function split(items, now = Date.now()) {
   }
 }
 
-export const addItem = (items, text, now = Date.now()) => [...items, { id: newId(), text, done: false, createdAt: now }]
-
-export const toggle = (items, id, now = Date.now()) => items.map((it) => {
-  if (it.id !== id) return it
-  const { doneAt: _drop, ...rest } = it
-  return it.done ? { ...rest, done: false } : { ...rest, done: true, doneAt: now }
-})
-
-export const cyclePriority = (items, id) => items.map((it) => {
-  if (it.id !== id) return it
-  const next = PRIORITIES[(PRIORITIES.indexOf(priorityOf(it)) + 1) % PRIORITIES.length]
-  const { priority: _drop, ...rest } = it
-  return next === 'low' ? rest : { ...rest, priority: next }
-})
-
-export const setParked = (items, id, parked) => items.map((it) => {
-  if (it.id !== id) return it
-  const { parked: _drop, ...rest } = it
-  return parked ? { ...rest, parked: true } : rest
-})
-
-export const remove = (items, id) => items.filter((it) => it.id !== id)
+// Op builders — one per action in llli.st.
+export const opAdd = (text, now = Date.now()) => ({ type: 'add', item: { id: newId(), text, done: false, createdAt: now } })
+export const opToggle = (item, now = Date.now()) => ({ type: 'set', id: item.id, patch: item.done ? { done: false, doneAt: null } : { done: true, doneAt: now } })
+export function opCycle(item) {
+  const next = PRIORITIES[(PRIORITIES.indexOf(priorityOf(item)) + 1) % PRIORITIES.length]
+  return { type: 'set', id: item.id, patch: { priority: next === 'low' ? null : next } }
+}
+export const opPark = (item, parked) => ({ type: 'set', id: item.id, patch: { parked: parked ? true : null } })
+export const opRemove = (item) => ({ type: 'remove', id: item.id })
 
 /** Counts for the index page: open (not done, not parked) and parked. */
 export function summary(items, now = Date.now()) {
