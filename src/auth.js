@@ -49,11 +49,14 @@ export async function loginWithPasskey() {
 export const listPasskeys = () => request('/passkeys')
 export const removePasskey = (id) => request(`/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
-export async function addPasskey(name) {
+export const renamePasskey = (id, name) => request(`/passkeys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+
+/** `auto` says the name is our own guess, so the server may replace it with where the passkey really lives. */
+export async function addPasskey(name, auto) {
   const options = await post('/passkeys/options')
   let response
   try { response = await startRegistration({ optionsJSON: options }) } catch (err) { throw explain(err) }
-  return post('/passkeys/verify', { response, name })
+  return post('/passkeys/verify', { response, name, auto })
 }
 
 /** Run a passkey-list change; if the sign-in is too old the server asks for a fresh one, so do that and retry. */

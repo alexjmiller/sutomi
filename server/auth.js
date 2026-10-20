@@ -31,6 +31,21 @@ const SESSION_DAYS = 30
 const CHALLENGE_MS = 2 * 60 * 1000
 const FRESH_MS = 10 * 60 * 1000 // how recent a sign-in must be to change the passkey list
 
+// Where a passkey lives, from the authenticator's AAGUID. A synced one (iCloud Keychain, a password manager)
+// works from any browser on any device that shares it, so that is a better name than "Mac · Safari".
+const PROVIDERS = {
+  'fbfc3007-154e-4ecc-8c0b-6e020557d7bd': 'iCloud Keychain',
+  'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4': 'Google Password Manager',
+  'adce0002-35bc-c60a-648b-0b25f1f05503': 'Chrome on Mac',
+  '08987058-cadc-4b81-b6e1-30de50dcbe96': 'Windows Hello',
+  '9ddd1817-af5a-4672-a2b9-3e3dd95000a9': 'Windows Hello',
+  'bada5566-a7aa-401f-bd96-45619a55120d': '1Password',
+  'd548826e-79b4-db40-a3d8-11116f7e8349': 'Bitwarden',
+  '531126d6-e717-415c-9320-3d9aa6981239': 'Dashlane',
+  '50726f74-6f6e-5061-7373-50726f746f6e': 'Proton Pass',
+  'b5397666-4885-aa6b-cebf-e52262a439a2': 'Chromium browser',
+}
+
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 const now = () => Date.now()
 
@@ -154,7 +169,7 @@ export function authRouter({ dataDir, password }) {
 
   const user = () => ({ name: DISPLAY_NAME })
   const publicCredential = (c) => ({
-    id: c.id, name: c.name, createdAt: c.createdAt, lastUsedAt: c.lastUsedAt || null, backedUp: Boolean(c.backedUp),
+    id: c.id, name: c.name, provider: c.provider || null, createdAt: c.createdAt, lastUsedAt: c.lastUsedAt || null, backedUp: Boolean(c.backedUp),
   })
   const toCredential = (c) => ({ id: c.id, publicKey: Buffer.from(c.publicKey, 'base64url'), counter: c.counter, transports: c.transports })
 
@@ -255,7 +270,7 @@ export function authRouter({ dataDir, password }) {
   })
 
   router.post('/passkeys/verify', requireAuth, requireFresh, async (req, res) => {
-    const { response, name } = req.body || {}
+    const { response, name, auto } = req.body || {} // auto: the name is the client's own guess, not typed
     let result
     try {
       result = await verifyRegistrationResponse({
@@ -269,9 +284,11 @@ export function authRouter({ dataDir, password }) {
       return res.status(400).json({ error: err.message || 'verification failed' })
     }
     if (!result.verified) return res.status(400).json({ error: 'not verified' })
-    const { credential, credentialBackedUp, credentialDeviceType } = result.registrationInfo
+    const { credential, credentialBackedUp, credentialDeviceType, aaguid } = result.registrationInfo
     const data = store()
     if (data.credentials.some((c) => c.id === credential.id)) return res.status(409).json({ error: 'already registered' })
+    const provider = PROVIDERS[aaguid] || null
+    const typed = String(name || '').trim().slice(0, 60)
     data.credentials.push({
       id: credential.id,
       publicKey: Buffer.from(credential.publicKey).toString('base64url'),
@@ -279,10 +296,23 @@ export function authRouter({ dataDir, password }) {
       transports: credential.transports || [],
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
-      name: String(name || '').trim().slice(0, 60) || 'passkey',
+      aaguid,
+      provider,
+      name: (auto && provider) || typed || provider || 'passkey',
       createdAt: now(),
       lastUsedAt: null,
     })
+    passkeys.write(data)
+    res.json(data.credentials.map(publicCredential))
+  })
+
+  router.patch('/passkeys/:id', requireAuth, (req, res) => {
+    const data = store()
+    const cred = data.credentials.find((c) => c.id === req.params.id)
+    if (!cred) return res.status(404).json({ error: 'not found' })
+    const name = String(req.body?.name || '').trim().slice(0, 60)
+    if (!name) return res.status(400).json({ error: 'name required' })
+    cred.name = name
     passkeys.write(data)
     res.json(data.credentials.map(publicCredential))
   })
