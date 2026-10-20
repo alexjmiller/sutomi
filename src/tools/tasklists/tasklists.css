@@ -48,7 +48,8 @@
 /* List page */
 .tl-title { cursor: text; }
 .tl-title:hover { text-decoration: underline dotted; }
-.tl-rename { font-size: 28px; margin: 0 0 16px; max-width: 480px; }
+/* The rename box stands exactly where the heading was: a block with the h1's margins, the pencil line just under the text */
+.tl-rename { display: block; width: 100%; max-width: 480px; font-size: 28px; line-height: normal; margin: 0 0 8px; padding: 0; }
 
 .tl-items { list-style: none; padding: 0; margin: 0; }
 .tl-item { margin: 0 -10px; transition: background-color 0.3s; }
