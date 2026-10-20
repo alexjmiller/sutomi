@@ -42,6 +42,7 @@ export function opCycle(item) {
   const next = PRIORITIES[(PRIORITIES.indexOf(priorityOf(item)) + 1) % PRIORITIES.length]
   return { type: 'set', id: item.id, patch: { priority: next === 'low' ? null : next } }
 }
+export const opText = (item, text) => ({ type: 'set', id: item.id, patch: { text } })
 export const opPark = (item, parked) => ({ type: 'set', id: item.id, patch: { parked: parked ? true : null } })
 export const opRemove = (item) => ({ type: 'remove', id: item.id })
 

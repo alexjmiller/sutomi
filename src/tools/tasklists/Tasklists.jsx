@@ -1,11 +1,15 @@
 // Tasklists — the llli.st list (~/Projects/listicles) as a sutomi tool, several lists, stored server-side.
 // Add an item, flag its priority, tick it off, park it, delete it. Ticked items fade out after a day.
+// On a touch screen a row is swiped right to delete and left to park (swipe.js; on the index a swipe
+// right asks before deleting a list); with a mouse the park / delete buttons appear on hover. Item text is edited in place, as in llli.st: saved on blur or
+// Enter (which also returns to the add box), Escape reverts, emptied or unchanged text is ignored.
 // Each action is one op: applied locally at once, sent to the server, which merges it into the stored
 // list and answers with the result — so two devices on the same list don't overwrite each other.
 import { useState, useEffect, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { listLists, getList, createList, deleteList, patchList } from './api'
-import { split, summary, priorityOf, applyOp, opAdd, opToggle, opCycle, opPark, opRemove } from './lists'
+import { split, summary, priorityOf, applyOp, opAdd, opToggle, opCycle, opText, opPark, opRemove } from './lists'
+import { useSwipe } from './swipe'
 import './tasklists.css'
 
 export default function Tasklists() {
@@ -64,29 +68,40 @@ function ListIndex() {
       {lists && lists.length === 0 && <p className="tl-muted">no lists yet</p>}
       {lists && lists.length > 0 && (
         <ul className="tl-lists">
-          {lists.map((l) => {
-            const s = summary(l.items || [])
-            return (
-              <li key={l.id} className="tl-lists-item">
-                <Link to={`/tools/tasklists/${l.id}`} className="tl-lists-name">{l.name || 'untitled'}</Link>
-                <span className="tl-muted">
-                  {s.open === 0 ? 'nothing open' : `${s.open} open`}{s.parked ? ` · ${s.parked} parked` : ''} · {fmtDate(l.updatedAt)}
-                </span>
-                {confirm === l.id ? (
-                  <span className="tl-confirm">
-                    delete this list?
-                    <button type="button" className="tl-text-btn danger" onClick={() => destroy(l)}>yes</button>
-                    <button type="button" className="tl-text-btn" onClick={() => setConfirm(null)}>no</button>
-                  </span>
-                ) : (
-                  <button type="button" className="tl-text-btn quiet" onClick={() => setConfirm(l.id)}>delete</button>
-                )}
-              </li>
-            )
-          })}
+          {lists.map((l) => (
+            <ListRow key={l.id} list={l} confirming={confirm === l.id} onAsk={() => setConfirm(l.id)} onCancel={() => setConfirm(null)} onDelete={() => destroy(l)} />
+          ))}
         </ul>
       )}
+      <p className="tl-muted tl-swipe-hint">swipe a list right to delete it</p>
     </main>
+  )
+}
+
+// One list on the index. On a touch screen a swipe right brings up the delete prompt (a whole list
+// is worth a second look, so the swipe asks rather than deletes); with a mouse there's a delete button.
+function ListRow({ list, confirming, onAsk, onCancel, onDelete }) {
+  const s = summary(list.items || [])
+  const swipe = useSwipe({ onRight: onAsk })
+  return (
+    <li className={`tl-lists-item tl-swipe${swipe.className}`} {...swipe.handlers}>
+      <span className="tl-under delete" aria-hidden="true">delete</span>
+      <div className="tl-row tl-lists-row" style={swipe.style}>
+        <Link to={`/tools/tasklists/${list.id}`} className="tl-lists-name">{list.name || 'untitled'}</Link>
+        <span className="tl-muted">
+          {s.open === 0 ? 'nothing open' : `${s.open} open`}{s.parked ? ` · ${s.parked} parked` : ''} · {fmtDate(list.updatedAt)}
+        </span>
+        {confirming ? (
+          <span className="tl-confirm">
+            delete this list?
+            <button type="button" className="tl-text-btn danger" onClick={onDelete}>yes</button>
+            <button type="button" className="tl-text-btn" onClick={onCancel}>no</button>
+          </span>
+        ) : (
+          <button type="button" className="tl-text-btn quiet tl-delete-btn" onClick={onAsk}>delete</button>
+        )}
+      </div>
+    </li>
   )
 }
 
@@ -122,6 +137,7 @@ function ListPage({ id }) {
     patchList(id, body).then(setList).catch(() => setError("couldn't save — check your connection"))
   }
   const change = (op) => send({ ops: [op] })
+  const focusAdd = () => inputRef.current?.focus()
 
   function add(e) {
     e.preventDefault()
@@ -176,61 +192,86 @@ function ListPage({ id }) {
 
       {open.length === 0 && parked.length === 0 && <p className="tl-muted">nothing here yet</p>}
       <ul className="tl-items">
-        {open.map((it) => <Row key={it.id} item={it} onChange={change} />)}
+        {open.map((it) => <Row key={it.id} item={it} onChange={change} focusAdd={focusAdd} />)}
       </ul>
 
       {parked.length > 0 && (
         <section className="tl-parked">
           <h2 className="tl-parked-heading">parked</h2>
           <ul className="tl-items">
-            {parked.map((it) => <Row key={it.id} item={it} onChange={change} />)}
+            {parked.map((it) => <Row key={it.id} item={it} onChange={change} focusAdd={focusAdd} />)}
           </ul>
         </section>
       )}
 
-      <p className="tl-muted tl-foot">ticked items disappear a day after being ticked · <button type="button" className="tl-text-btn quiet" onClick={() => { if (window.confirm(`delete the list "${list.name}"?`)) destroy() }}>delete this list</button></p>
+      <p className="tl-muted tl-foot">ticked items disappear a day after being ticked · <span className="tl-swipe-hint">swipe right to delete, left to park · </span><button type="button" className="tl-text-btn quiet" onClick={() => { if (window.confirm(`delete the list "${list.name}"?`)) destroy() }}>delete this list</button></p>
     </main>
   )
 }
 
-function Row({ item, onChange }) {
+function Row({ item, onChange, focusAdd }) {
   const priority = priorityOf(item)
+  const [draft, setDraft] = useState(item.text)
+  const revert = useRef(false)
+  useEffect(() => { setDraft(item.text) }, [item.text])
+  function saveText() {
+    const t = draft.trim()
+    if (revert.current || !t || t === item.text) { revert.current = false; setDraft(item.text); return }
+    onChange(opText(item, t))
+  }
+  function textKey(e) {
+    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); focusAdd?.() }
+    else if (e.key === 'Escape') { revert.current = true; e.currentTarget.blur() }
+  }
   const keyAct = (fn) => (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); fn() } }
   const cycle = () => onChange(opCycle(item))
   const tick = () => onChange(opToggle(item))
+  const swipe = useSwipe({ onRight: () => onChange(opRemove(item)), onLeft: () => onChange(opPark(item, !item.parked)) })
   return (
-    <li className={`tl-item${item.done ? ' done' : ''}`}>
-      {item.done ? (
-        <span className="tl-flag inert" />
-      ) : (
+    <li className={`tl-item tl-swipe${item.done ? ' done' : ''}${swipe.className}`} {...swipe.handlers}>
+      <span className="tl-under delete" aria-hidden="true">delete</span>
+      <span className="tl-under park" aria-hidden="true">{item.parked ? 'unpark' : 'park'}</span>
+      <div className="tl-row" style={swipe.style}>
+        {item.done ? (
+          <span className="tl-flag inert" />
+        ) : (
+          <span
+            className={`tl-flag ${priority}`}
+            role="button"
+            tabIndex={0}
+            title={`priority: ${priority} — click to change`}
+            aria-label={`priority: ${priority}. click to change`}
+            onClick={cycle}
+            onKeyDown={keyAct(cycle)}
+          >
+            <Flag priority={priority} />
+          </span>
+        )}
         <span
-          className={`tl-flag ${priority}`}
-          role="button"
+          className="tl-check"
+          role="checkbox"
           tabIndex={0}
-          title={`priority: ${priority} — click to change`}
-          aria-label={`priority: ${priority}. click to change`}
-          onClick={cycle}
-          onKeyDown={keyAct(cycle)}
+          aria-checked={item.done}
+          title={item.done ? 'mark as not done' : 'mark as done'}
+          onClick={tick}
+          onKeyDown={keyAct(tick)}
         >
-          <Flag priority={priority} />
+          {item.done ? '✓' : ''}
         </span>
-      )}
-      <span
-        className="tl-check"
-        role="checkbox"
-        tabIndex={0}
-        aria-checked={item.done}
-        title={item.done ? 'mark as not done' : 'mark as done'}
-        onClick={tick}
-        onKeyDown={keyAct(tick)}
-      >
-        {item.done ? '✓' : ''}
-      </span>
-      <span className="tl-text">{item.text}</span>
-      <span className="tl-actions">
-        <button type="button" className="tl-action park" onClick={() => onChange(opPark(item, !item.parked))}>{item.parked ? 'unpark' : 'park'}</button>
-        <button type="button" className="tl-action delete" onClick={() => onChange(opRemove(item))}>delete</button>
-      </span>
+        <input
+          className="tl-text"
+          value={draft}
+          aria-label="item text"
+          autoComplete="off"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={saveText}
+          onKeyDown={textKey}
+        />
+        <span className="tl-actions">
+          <button type="button" className="tl-action park" onClick={() => onChange(opPark(item, !item.parked))}>{item.parked ? 'unpark' : 'park'}</button>
+          <button type="button" className="tl-action delete" onClick={() => onChange(opRemove(item))}>delete</button>
+        </span>
+      </div>
     </li>
   )
 }

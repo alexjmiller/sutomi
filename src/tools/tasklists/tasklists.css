@@ -33,16 +33,11 @@
 
 /* Index of lists */
 .tl-lists { list-style: none; padding: 0; margin: 0; }
-.tl-lists-item {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  padding: 10px 0;
-  border-bottom: 2px solid #46413d;
-}
+.tl-lists-item { border-bottom: 2px solid #46413d; }
+.tl-lists-row { align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: 10px 0; }
 .tl-lists-name { font-size: 20px; color: #46413d; text-decoration: none; flex: 1; min-width: 0; }
 .tl-lists-name:hover { color: #d4532b; }
-.tl-confirm { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 16px; }
+.tl-confirm { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 16px; margin-left: auto; } /* drops to its own line when the row is narrow */
 
 /* List page */
 .tl-title { cursor: text; }
@@ -50,15 +45,23 @@
 .tl-rename { font-size: 28px; margin: 0 0 16px; max-width: 480px; }
 
 .tl-items { list-style: none; padding: 0; margin: 0; }
-.tl-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px 10px;
-  margin: 0 -10px;
-  transition: background-color 0.3s;
-}
+.tl-item { margin: 0 -10px; transition: background-color 0.3s; }
 .tl-item:hover { background: #46413d0d; }
+.tl-row { display: flex; align-items: center; gap: 14px; padding: 8px 10px; }
+
+/* Swipe on a touch screen (item rows and index rows): the row body slides with the finger and
+   uncovers a label — delete on the left when swiping right, park on the right when swiping left;
+   past the commit point the uncovered strip tints */
+.tl-swipe { position: relative; overflow: hidden; touch-action: pan-y; }
+.tl-under { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 12px; font-size: 16px; opacity: 0; pointer-events: none; }
+.tl-swipe.swiping .tl-under { transition: opacity 0.15s; } /* fades in while held; gone at once when the row settles */
+.tl-under.delete { color: #d4532b; justify-content: flex-start; }
+.tl-under.park { color: #46413d; justify-content: flex-end; }
+.tl-swipe.swiping > .tl-row { background: #faf5e4; }
+.tl-swipe.swipe-right .tl-under.delete, .tl-swipe.swipe-left .tl-under.park { opacity: 0.5; }
+.tl-swipe.armed .tl-under.delete, .tl-swipe.armed .tl-under.park { opacity: 1; }
+.tl-swipe.armed.swipe-right { background: #d4532b1f; }
+.tl-swipe.armed.swipe-left { background: #46413d1f; }
 
 /* Priority flag slot: low only shows on row hover */
 .tl-flag { width: 14px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -86,7 +89,21 @@
 .tl-check:hover, .tl-check:focus-visible { border-color: #d4532b; }
 .tl-item.done .tl-check { background: #46413d; }
 
-.tl-text { flex: 1; min-width: 0; padding: 2px 0; font-size: 18px; word-break: break-word; }
+/* Item text is an input, edited in place: no border until focused, then a red underline */
+.tl-text {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  font-family: 'Alexabet5', monospace;
+  font-size: 18px;
+  color: #46413d;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  outline: none;
+}
+.tl-text:focus { border-bottom-color: #d4532b; }
 .tl-item.done .tl-text { text-decoration: line-through; color: #46413d80; }
 
 /* Row actions appear on hover (always on touch widths) */
@@ -109,6 +126,16 @@
 
 .tl-foot { margin-top: 40px; }
 
+.tl-swipe-hint { display: none; }
+
+/* No hover (touch screens): swipe instead of the park / delete buttons, low flags always drawn */
+@media (hover: none) {
+  .tl-actions, .tl-delete-btn { display: none; }
+  .tl-item:hover { background: transparent; }       /* a tap would otherwise leave the tint behind */
+  .tl-check:hover { border-color: #46413d; }
+  .tl-flag-low { opacity: 1; }
+  .tl-swipe-hint { display: revert; }
+}
 @media (max-width: 480px) {
   .tl-action { color: #46413d99; }
   .tl-flag-low { opacity: 1; }

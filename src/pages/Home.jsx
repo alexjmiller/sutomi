@@ -59,6 +59,7 @@ export default function Home() {
   }, [])
 
   function handleClick(e, articleId, isActive) {
+    if (e.target.closest('a')) return // a link inside the article: the browser follows it, the article stays open
     e.preventDefault()
     if (phase === 'list') openArticle(articleId)
     else if (phase === 'open' && isActive) closeArticle()
