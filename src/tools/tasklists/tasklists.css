@@ -53,6 +53,8 @@
 .tl-rename { display: block; width: 100%; max-width: 480px; font-size: 28px; line-height: normal; margin: 0 0 8px; padding: 0; }
 
 .tl-items { list-style: none; padding: 0; margin: 0; }
+/* On a wide screen the item rows run 30% past the page column so longer text fits; the add box stays as it is */
+@media (min-width: 900px) { .tl-items { width: 130%; } }
 .tl-item { margin: 0 -10px; transition: background-color 0.3s; }
 .tl-item:hover { background: #46413d0d; }
 .tl-row { display: flex; align-items: center; gap: 14px; padding: 8px 10px; }
