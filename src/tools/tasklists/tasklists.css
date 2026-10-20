@@ -4,6 +4,7 @@
   max-width: 640px;
   /* Lines are drawn, not ruled: a gently wobbling pencil stroke with faint graphite grain, tiled along the edge */
   --tl-line: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='320'%20height='6'%20viewBox='0%200%20320%206'%3E%3Cpath%20d='M0%203.2C40%202.3%2080%203.9%20120%203.1S200%202.5%20240%203.4%20300%203.7%20320%203.2'%20fill='none'%20stroke='%2346413d'%20stroke-width='1.5'%20stroke-linecap='round'%20opacity='.9'/%3E%3Cpath%20d='M0%203.9C40%203.1%2080%204.5%20120%203.8S200%203.2%20240%204.1%20300%204.3%20320%203.9'%20fill='none'%20stroke='%2346413d'%20stroke-width='.7'%20stroke-dasharray='11%203%2017%202%207%204'%20opacity='.35'/%3E%3C/svg%3E");
+  --tl-line-light: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='320'%20height='6'%20viewBox='0%200%20320%206'%3E%3Cpath%20d='M0%203.2C40%202.3%2080%203.9%20120%203.1S200%202.5%20240%203.4%20300%203.7%20320%203.2'%20fill='none'%20stroke='%23a8a39d'%20stroke-width='1.5'%20stroke-linecap='round'%20opacity='.9'/%3E%3Cpath%20d='M0%203.9C40%203.1%2080%204.5%20120%203.8S200%203.2%20240%204.1%20300%204.3%20320%203.9'%20fill='none'%20stroke='%23a8a39d'%20stroke-width='.7'%20stroke-dasharray='11%203%2017%202%207%204'%20opacity='.35'/%3E%3C/svg%3E"); /* separators: the same stroke in a light warm grey */
   --tl-line-red: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='320'%20height='6'%20viewBox='0%200%20320%206'%3E%3Cpath%20d='M0%203.2C40%202.3%2080%203.9%20120%203.1S200%202.5%20240%203.4%20300%203.7%20320%203.2'%20fill='none'%20stroke='%23d4532b'%20stroke-width='1.5'%20stroke-linecap='round'%20opacity='.9'/%3E%3Cpath%20d='M0%203.9C40%203.1%2080%204.5%20120%203.8S200%203.2%20240%204.1%20300%204.3%20320%203.9'%20fill='none'%20stroke='%23d4532b'%20stroke-width='.7'%20stroke-dasharray='11%203%2017%202%207%204'%20opacity='.35'/%3E%3C/svg%3E");
 }
 .tl-line { background: var(--tl-line) repeat-x left bottom / 320px 6px; }
@@ -39,7 +40,7 @@
 
 /* Index of lists */
 .tl-lists { list-style: none; padding: 0; margin: 0; }
-.tl-lists-item { background: var(--tl-line) repeat-x left bottom / 320px 6px; padding-bottom: 4px; }
+.tl-lists-item { background: var(--tl-line-light) repeat-x left bottom / 320px 6px; padding-bottom: 4px; }
 .tl-lists-row { align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: 10px 0; }
 .tl-lists-name { font-size: 20px; color: #46413d; text-decoration: none; flex: 1; min-width: 0; }
 .tl-lists-name:hover { color: #d4532b; }
