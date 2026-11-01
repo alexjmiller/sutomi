@@ -3,10 +3,16 @@
 //
 // Idempotent writes: `add_task` takes a `request_key`; the item's id is derived from it, and sutomi
 // ignores an add whose id already exists, so repeating a request after a dropped connection returns
-// the original item instead of a duplicate.
+// the original item instead of a duplicate. `add_calendar_task` can't choose the substrate's id, so it
+// remembers recent request keys and, before creating, looks for an open task with the same title on
+// the same day — a retry finds the one already there.
+//
+// Event Horizon (the calendar) is reached through sutomi's substrate proxy: materialized occurrences
+// for reading, POST /events (+ a reminder) for a plain task on a date. Dates are Europe/London.
 import { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { createHash, randomBytes } from 'crypto'
+import { ZONE, addDays, instantOf, localOf } from './dates.js'
 
 const HIDE_DONE_AFTER_MS = 24 * 60 * 60 * 1000 // same rule as sutomi's tasklists page
 
@@ -22,6 +28,20 @@ const Item = z.object({
   created_at: z.string().describe('ISO 8601'),
 })
 const ListSummary = z.object({ id: z.string(), name: z.string(), open: z.number().int(), parked: z.number().int() })
+const CalendarItem = z.object({
+  id: z.string().describe('Occurrence id (one per day of a series); the event id for a just-created task'),
+  event_id: z.string(),
+  title: z.string(),
+  kind: z.enum(['task', 'event', 'info']),
+  date: z.string().describe(`YYYY-MM-DD in ${ZONE}`),
+  end_date: z.string().optional().describe('Last day, when it spans several'),
+  time: z.string().optional().describe(`HH:MM in ${ZONE}; absent for all-day items`),
+  end_time: z.string().optional(),
+  completed: z.boolean(),
+  chain: z.string().nullable().describe('The Event Horizon instance tag when the item belongs to a preparation chain'),
+})
+/** request_key → the task it created, so a repeated request (the process is long-lived) answers the same. */
+const recentCalendarAdds = new Map()
 
 const toItem = (it) => ({
   id: it.id, text: it.text, done: Boolean(it.done), parked: Boolean(it.parked),
@@ -109,6 +129,102 @@ export function buildServer(sutomi, { now = Date.now } = {}) {
     const saved = (merged.items || []).find((it) => it.id === id)
     if (!saved) return fail(`sutomi did not confirm the item on ${list.name}.`)
     return ok(`Added ${saved.text} to ${merged.name}.`, { created: true, list: { id: merged.id, name: merged.name }, item: toItem(saved) })
+  })
+
+  // ---- Event Horizon: the calendar ---------------------------------------------------------------
+
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+  const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+  const INSTANCE_TAG = /^ehn:[a-z0-9-]+:[0-9a-f]+$/
+  const dateInput = (what) => z.string().regex(ISO_DATE).describe(`${what}, YYYY-MM-DD in ${ZONE}`)
+  const sameTitle = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase()
+
+  function toCalendarItem(occ) {
+    const item = { id: occ.occurrence_id, event_id: occ.event_id, title: occ.title, kind: occ.kind || (occ.is_task ? 'task' : 'event'), completed: Boolean(occ.completed_at), chain: (occ.tags || []).find((t) => INSTANCE_TAG.test(t)) || null }
+    if (occ.time_type === 'all_day') {
+      item.date = occ.starts_at.slice(0, 10)
+      const last = addDays(occ.ends_at.slice(0, 10), -1)
+      if (last > item.date) item.end_date = last
+    } else {
+      const s = localOf(occ.starts_at), e = localOf(occ.ends_at)
+      item.date = s.date; item.time = s.time; item.end_time = e.time
+      if (e.date > s.date) item.end_date = e.date
+    }
+    return item
+  }
+  const byWhen = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || '') < (b.time || '') ? -1 : (a.time || '') > (b.time || '') ? 1 : 0)
+
+  /** Occurrences whose days overlap [from, to] (inclusive, London dates), as CalendarItems. */
+  async function fetchRange({ from, to, kinds, query, includeCompleted }) {
+    const params = { from: instantOf(from, '00:00').toISOString(), to: instantOf(addDays(to, 1), '00:00').toISOString(), limit: '100' }
+    if (query) params.q = query
+    if (kinds.length === 1) params.kind = kinds[0]
+    const items = []
+    let cursor = null
+    for (let page = 0; page < 10; page++) {
+      const r = await sutomi.ehEvents(cursor ? { ...params, cursor } : params)
+      items.push(...r.items.map(toCalendarItem))
+      cursor = r.next_cursor
+      if (!cursor) break
+    }
+    return items
+      .filter((it) => it.date <= to && (it.end_date || it.date) >= from)
+      .filter((it) => kinds.includes(it.kind))
+      .filter((it) => includeCompleted || !it.completed)
+      .sort(byWhen)
+  }
+  const whenText = (it) => `${it.date}${it.end_date ? `–${it.end_date}` : ''}${it.time ? ` ${it.time}` : ''}`
+
+  server.registerTool('list_calendar', {
+    title: 'What is on the calendar',
+    description: `Event Horizon items (tasks, events, information) between two dates inclusive, in ${ZONE}, earliest first. Tasks and events by default; completed tasks are left out unless asked for. The calendar only knows about 18 months ahead.`,
+    inputSchema: z.object({
+      from: dateInput('First day'),
+      to: dateInput('Last day (inclusive)').optional().describe(`Last day, inclusive; omit for one day`),
+      kinds: z.array(z.enum(['task', 'event', 'info'])).min(1).optional().describe('Default: task and event. info = bank holidays, school terms and the like'),
+      query: z.string().trim().min(1).max(100).optional().describe('Words in the title'),
+      include_completed: z.boolean().optional(),
+    }),
+    outputSchema: z.object({ from: z.string(), to: z.string(), items: z.array(CalendarItem) }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  }, async ({ from, to = from, kinds = ['task', 'event'], query, include_completed = false }) => {
+    if (to < from) return fail('`to` is before `from`.')
+    const items = await fetchRange({ from, to, kinds, query, includeCompleted: include_completed })
+    const text = items.length ? `${plural(items.length, 'item')}: ${items.map((it) => `${it.title} (${whenText(it)}${it.completed ? ', done' : ''})`).join('; ')}` : `Nothing between ${from} and ${to}.`
+    return ok(text, { from, to, items })
+  })
+
+  server.registerTool('add_calendar_task', {
+    title: 'Add to the calendar',
+    description: `Put a plain task (default) or event on a day in Event Horizon (${ZONE}), with a reminder: at 09:00 for an all-day item, at the start of a timed task, 30 minutes before a timed event. Not for things that need preparation chains — those come from the Event Horizon interview. Pass a unique request_key per new request; repeating it returns the item already added. An open item of the same kind with the same title on the same day is also treated as already added.`,
+    inputSchema: z.object({
+      title: z.string().trim().min(1).max(200).describe('The task or event, as the user said it'),
+      kind: z.enum(['task', 'event']).optional().describe('task (completable, default) or event (a thing happening)'),
+      date: dateInput('The day'),
+      time: z.string().regex(HHMM).optional().describe(`HH:MM in ${ZONE}; omit for an all-day task`),
+      duration_minutes: z.number().int().min(5).max(720).optional().describe('With a time only; default 60'),
+      request_key: z.string().min(8).max(200).optional().describe('Unique per request; repeating it is safe'),
+    }),
+    outputSchema: z.object({ created: z.boolean(), item: CalendarItem }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, async ({ title, kind = 'task', date, time, duration_minutes = 60, request_key }) => {
+    const remembered = request_key && recentCalendarAdds.get(request_key)
+    if (remembered) return ok(`${remembered.title} was already on the calendar for ${whenText(remembered)}.`, { created: false, item: remembered })
+    const twin = (await fetchRange({ from: date, to: date, kinds: [kind], query: title, includeCompleted: false })).find((it) => sameTitle(it.title, title) && (it.time || null) === (time || null))
+    if (twin) return ok(`${twin.title} was already on the calendar for ${whenText(twin)}.`, { created: false, item: twin })
+    const common = { title, kind, tags: ['sutomi'], metadata: { sutomi: { via: 'mcp', ...(request_key ? { request_key } : {}) } } }
+    const body = time
+      ? { time_type: 'timed', timezone: ZONE, dtstart_local: `${date}T${time}:00`, duration_seconds: duration_minutes * 60, ...common }
+      : { time_type: 'all_day', start_date: date, end_date: addDays(date, 1), ...common }
+    const ev = await sutomi.ehCreateEvent(body)
+    const offset = !time ? 9 * 3600 : kind === 'event' ? -30 * 60 : 0
+    try { await sutomi.ehAddReminder(ev.id, { trigger: 'relative', offset_seconds: offset }) } catch { /* the item exists; a missing reminder is not worth failing the add */ }
+    const item = { id: ev.id, event_id: ev.id, title: ev.title, kind, date, ...(time ? { time } : {}), completed: false, chain: null }
+    if (request_key) {
+      recentCalendarAdds.set(request_key, item)
+      if (recentCalendarAdds.size > 500) recentCalendarAdds.delete(recentCalendarAdds.keys().next().value)
+    }
+    return ok(`Added ${item.title} to the calendar for ${whenText(item)}.`, { created: true, item })
   })
 
   return server

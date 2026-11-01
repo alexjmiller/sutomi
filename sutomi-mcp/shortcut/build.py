@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Builds and signs `sutomi.shortcut`, the Siri Shortcut that talks to POST /voice.
+"""Builds and signs the Siri Shortcuts that talk to POST /voice — one per job (SHORTCUTS below):
+each sends its `mode` on every call, so the service opens with that job's question and keeps to it.
 
 Run on a Mac:  python3 shortcut/build.py
 Signing needs a Mac that is signed into iCloud. dev.lan is not, so there set SIGN_HOST to an ssh
 host that is (SIGN_HOST=devbook python3 shortcut/build.py): the unsigned file is copied over,
 signed with `shortcuts sign --mode anyone`, and copied back.
-Then AirDrop `shortcut/sutomi.shortcut` to the phone (or open it from Files) and tap Add Shortcut.
-The token is NOT in the file: the first Text action holds a placeholder — open the shortcut on the
-phone and paste the voice token there (ssh dedibox "grep ^SUTOMI_VOICE_TOKEN= /data/sutomi/.env").
+Then AirDrop the `shortcut/*.shortcut` files to the phone (or open them from Files) and tap Add
+Shortcut. The token is NOT in the files: the first Text action holds a placeholder — open each
+shortcut on the phone and paste the voice token there (ssh dedibox "grep ^SUTOMI_VOICE_TOKEN=
+/data/sutomi/.env"). A shortcut is run by saying its name to Siri; rename it on the phone if Siri
+keeps answering with its own Calendar or Reminders instead.
 
-What the shortcut does (see README.md): empty Conversation and Said; up to TURNS times, POST
-{conversation_id, text} with the bearer token, remember reply and conversation_id, and if `next` is
+What a shortcut does (see README.md): empty Conversation and Said; up to TURNS times, POST
+{conversation_id, text, mode} with the bearer token, remember reply and conversation_id, and if `next` is
 "stop" show the reply (Siri speaks it) and stop, otherwise ask for input with the reply as the
 prompt (Siri speaks it and listens) and send what was said as the next turn.
 """
@@ -22,6 +25,12 @@ import sys
 import uuid
 
 URL = 'https://sutomi.net/voice'
+SHORTCUTS = [  # (name as said to Siri, mode)
+    ('create a task', 'task'),
+    ('create an event', 'event'),
+    ('tell me about my tasks', 'tasks'),
+    ('tell me about my events', 'events'),
+]
 TURNS = 8
 TOKEN_PLACEHOLDER = 'PASTE-VOICE-TOKEN-HERE'
 OBJ = '￼'  # the character a variable occupies inside a text field
@@ -59,10 +68,10 @@ def get_value(key, source_uuid, out_uuid):
     return action('is.workflow.actions.getvalueforkey', UUID=out_uuid, WFGetDictionaryValueType='Value',
                   WFDictionaryKey=key, WFInput=attachment(output(source_uuid, 'Contents of URL')))
 
-def build():
+def build(mode):
     token, empty, repeat, url, reply, cid, nxt, nxt_text, cond, ask = (uid() for _ in range(10))
     return [
-        action('is.workflow.actions.comment', WFCommentActionText='sutomi voice: paste the voice token into the Text box below (replace the placeholder). Nothing else needs changing.'),
+        action('is.workflow.actions.comment', WFCommentActionText=f'sutomi voice ({mode}): paste the voice token into the Text box below (replace the placeholder). Nothing else needs changing.'),
         action('is.workflow.actions.gettext', UUID=token, WFTextActionText=TOKEN_PLACEHOLDER),
         action('is.workflow.actions.gettext', UUID=empty, WFTextActionText=''),
         set_variable('Conversation', output(empty, 'Text')),
@@ -70,7 +79,7 @@ def build():
         action('is.workflow.actions.repeat.count', GroupingIdentifier=repeat, WFControlFlowMode=0, WFRepeatCount=TURNS),
         action('is.workflow.actions.downloadurl', UUID=url, WFURL=URL, WFHTTPMethod='POST', WFHTTPBodyType='JSON', ShowHeaders=True, Advanced=True,
                WFHTTPHeaders=dictionary({'Authorization': text('Bearer ' + OBJ, output(token, 'Text'))}),
-               WFJSONValues=dictionary({'conversation_id': text(OBJ, variable('Conversation')), 'text': text(OBJ, variable('Said'))})),
+               WFJSONValues=dictionary({'conversation_id': text(OBJ, variable('Conversation')), 'text': text(OBJ, variable('Said')), 'mode': text(mode)})),
         get_value('reply', url, reply),
         set_variable('Reply', output(reply, 'Dictionary Value')),
         get_value('conversation_id', url, cid),
@@ -94,40 +103,42 @@ def sign(unsigned, signed):
     cmd = ['shortcuts', 'sign', '--mode', 'anyone', '--input', unsigned.name, '--output', signed.name]
     if not host:
         return subprocess.run(cmd, cwd=unsigned.parent, capture_output=True, text=True)
+    import shlex
     subprocess.run(['ssh', host, 'mkdir -p tmp/sutomi-shortcut && rm -f tmp/sutomi-shortcut/*.shortcut'], check=True)
     subprocess.run(['scp', '-q', str(unsigned), f'{host}:tmp/sutomi-shortcut/'], check=True)
-    r = subprocess.run(['ssh', host, 'cd tmp/sutomi-shortcut && ' + ' '.join(cmd)], capture_output=True, text=True)
+    r = subprocess.run(['ssh', host, 'cd tmp/sutomi-shortcut && ' + ' '.join(shlex.quote(c) for c in cmd)], capture_output=True, text=True)
     if r.returncode == 0:
         subprocess.run(['scp', '-q', f'{host}:tmp/sutomi-shortcut/{signed.name}', str(signed)], check=True)
     return r
 
 def main():
     here = pathlib.Path(__file__).resolve().parent
-    workflow = {
-        'WFWorkflowActions': build(),
-        'WFWorkflowClientVersion': '5114.0.6.204',
-        'WFWorkflowMinimumClientVersion': 900,
-        'WFWorkflowMinimumClientVersionString': '900',
-        'WFWorkflowIcon': {'WFWorkflowIconStartColor': 4282601983, 'WFWorkflowIconGlyphNumber': 59511},
-        'WFWorkflowImportQuestions': [],
-        'WFWorkflowInputContentItemClasses': [],
-        'WFWorkflowTypes': [],
-        'WFWorkflowHasShortcutInputVariables': False,
-        'WFWorkflowHasOutputFallback': False,
-        'WFWorkflowOutputContentItemClasses': [],
-        'WFQuickActionSurfaces': [],
-    }
-    unsigned = here / 'sutomi.unsigned.shortcut'
-    signed = here / 'sutomi.shortcut'
-    unsigned.write_bytes(plistlib.dumps(workflow))
-    if signed.exists():
-        signed.unlink()
-    r = sign(unsigned, signed)
-    if r.returncode != 0:
-        print(r.stdout, r.stderr, file=sys.stderr)
-        sys.exit(f'signing failed; the unsigned file is at {unsigned}')
-    unsigned.unlink()
-    print(f'signed: {signed} ({signed.stat().st_size} bytes)')
+    for name, mode in SHORTCUTS:
+        workflow = {
+            'WFWorkflowActions': build(mode),
+            'WFWorkflowClientVersion': '5114.0.6.204',
+            'WFWorkflowMinimumClientVersion': 900,
+            'WFWorkflowMinimumClientVersionString': '900',
+            'WFWorkflowIcon': {'WFWorkflowIconStartColor': 4282601983, 'WFWorkflowIconGlyphNumber': 59511},
+            'WFWorkflowImportQuestions': [],
+            'WFWorkflowInputContentItemClasses': [],
+            'WFWorkflowTypes': [],
+            'WFWorkflowHasShortcutInputVariables': False,
+            'WFWorkflowHasOutputFallback': False,
+            'WFWorkflowOutputContentItemClasses': [],
+            'WFQuickActionSurfaces': [],
+        }
+        unsigned = here / f'{name}.unsigned.shortcut'
+        signed = here / f'{name}.shortcut'
+        unsigned.write_bytes(plistlib.dumps(workflow))
+        if signed.exists():
+            signed.unlink()
+        r = sign(unsigned, signed)
+        if r.returncode != 0:
+            print(r.stdout, r.stderr, file=sys.stderr)
+            sys.exit(f'signing failed; the unsigned file is at {unsigned}')
+        unsigned.unlink()
+        print(f'signed: {signed} ({signed.stat().st_size} bytes)')
 
 if __name__ == '__main__':
     main()

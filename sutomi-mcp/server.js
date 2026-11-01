@@ -54,9 +54,9 @@ app.post('/voice', voiceAuth, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {}
   const given = body.conversation_id == null ? '' : String(body.conversation_id).trim()
   const text = body.text == null ? '' : String(body.text)
-  const out = await voice.handle({ conversation_id: given, text })
+  const out = await voice.handle({ conversation_id: given, text, mode: body.mode })
   const how = !given ? 'new' : out.conversation_id === given ? 'resumed' : 'lost'
-  const shape = Object.keys(body).length ? `text:${text.trim().length}` : `no body (${req.headers['content-type'] || 'no content-type'})`
+  const shape = Object.keys(body).length ? `${body.mode ? `mode:${String(body.mode).slice(0, 12)} ` : ''}text:${text.trim().length}` : `no body (${req.headers['content-type'] || 'no content-type'})`
   log('voice')(`${visitorIp(req)} ${out.conversation_id} ${how} ${shape} ${out.finished ? 'finished' : 'listening'}`)
   res.json(out)
 })

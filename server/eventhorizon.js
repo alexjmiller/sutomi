@@ -15,11 +15,13 @@ const TOKENS = {
 }
 const TIMEOUT_MS = 20000
 
-// Only the substrate calls the calendar needs. Everything else stays unreachable from the browser.
+// Only the substrate calls the calendar and sutomi-mcp need. Everything else stays unreachable.
 const SUBSTRATE_ALLOW = [
   ['GET', /^\/events(\?.*)?$/],
+  ['POST', /^\/events$/], // sutomi-mcp's add_calendar_task (a plain task on a date)
   ['GET', /^\/events\/[^/?]+(\?.*)?$/],
   ['PATCH', /^\/events\/[^/?]+$/],
+  ['POST', /^\/events\/[^/?]+\/reminders$/], // its 09:00 reminder
   ['DELETE', /^\/events\/[^/?]+(\?.*)?$/],
   ['GET', /^\/metrics$/],
   ['GET', /^\/whoami$/],
