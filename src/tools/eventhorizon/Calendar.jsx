@@ -136,6 +136,14 @@ export default function Calendar() {
   }, [view, weeks, cursorIso, pages]) // eslint-disable-line react-hooks/exhaustive-deps
   const keyList = keys.join(',')
   useEffect(() => { occ.ensure(keys) }, [keyList, occ.generation]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Changes made elsewhere (Siri, another device) show up when the page comes back into view:
+  // reload the months on screen while keeping what we have.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') occ.reset() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) }
+  }, [occ.reset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const all = useMemo(() => occ.itemsFor(keys), [occ.version, occ.generation, keyList]) // eslint-disable-line react-hooks/exhaustive-deps
   const ageOf = useBirthYears(all)
