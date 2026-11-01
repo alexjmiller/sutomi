@@ -60,7 +60,7 @@ def get_value(key, source_uuid, out_uuid):
                   WFDictionaryKey=key, WFInput=attachment(output(source_uuid, 'Contents of URL')))
 
 def build():
-    token, empty, repeat, url, reply, cid, nxt, cond, ask = (uid() for _ in range(9))
+    token, empty, repeat, url, reply, cid, nxt, nxt_text, cond, ask = (uid() for _ in range(10))
     return [
         action('is.workflow.actions.comment', WFCommentActionText='sutomi voice: paste the voice token into the Text box below (replace the placeholder). Nothing else needs changing.'),
         action('is.workflow.actions.gettext', UUID=token, WFTextActionText=TOKEN_PLACEHOLDER),
@@ -76,8 +76,10 @@ def build():
         get_value('conversation_id', url, cid),
         set_variable('Conversation', output(cid, 'Dictionary Value')),
         get_value('next', url, nxt),
+        # The If must see Text, not an untyped dictionary value, or it only offers "has any value".
+        action('is.workflow.actions.gettext', UUID=nxt_text, WFTextActionText=text(OBJ, output(nxt, 'Dictionary Value'))),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=0, WFCondition=4, WFConditionalActionString='stop',
-               WFInput={'Type': 'Variable', 'Variable': attachment(output(nxt, 'Dictionary Value'))}),
+               WFInput={'Type': 'Variable', 'Variable': attachment(output(nxt_text, 'Text'))}),
         action('is.workflow.actions.showresult', Text=text(OBJ, variable('Reply'))),
         action('is.workflow.actions.exit'),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=1),
