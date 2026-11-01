@@ -12,10 +12,12 @@ shortcut on the phone and paste the voice token there (ssh dedibox "grep ^SUTOMI
 /data/sutomi/.env"). A shortcut is run by saying its name to Siri; rename it on the phone if Siri
 keeps answering with its own Calendar or Reminders instead.
 
-What a shortcut does (see README.md): empty Conversation and Said; up to TURNS times, POST
-{conversation_id, text, mode} with the bearer token, remember reply and conversation_id, and if `next` is
-"stop" output the reply (Siri speaks it as the response) and stop, otherwise ask for input with the reply as the
-prompt (Siri speaks it and listens) and send what was said as the next turn.
+What a shortcut does (see README.md): empty Conversation and Said, Finished = no; up to TURNS
+times while Finished is no: POST {conversation_id, text, mode} with the bearer token, remember reply
+and conversation_id, and if `next` is "stop" set Finished = yes, otherwise ask for input with the
+reply as the prompt (Siri speaks it and listens) and send what was said as the next turn. After the
+loop, show the reply — the last action, so Siri speaks it and does not add "That's done" (which it
+says after a Stop action).
 """
 import os
 import pathlib
@@ -69,14 +71,20 @@ def get_value(key, source_uuid, out_uuid):
                   WFDictionaryKey=key, WFInput=attachment(output(source_uuid, 'Contents of URL')))
 
 def build(mode):
-    token, empty, repeat, url, reply, cid, nxt, nxt_text, cond, ask = (uid() for _ in range(10))
+    token, empty, no, yes, repeat, url, reply, cid, nxt, nxt_text, guard, cond, ask = (uid() for _ in range(13))
+    named = lambda name: {'Type': 'Variable', 'Variable': attachment(variable(name))}  # an If over a named variable
     return [
         action('is.workflow.actions.comment', WFCommentActionText=f'sutomi voice ({mode}): paste the voice token into the Text box below (replace the placeholder). Nothing else needs changing.'),
         action('is.workflow.actions.gettext', UUID=token, WFTextActionText=TOKEN_PLACEHOLDER),
         action('is.workflow.actions.gettext', UUID=empty, WFTextActionText=''),
         set_variable('Conversation', output(empty, 'Text')),
         set_variable('Said', output(empty, 'Text')),
+        action('is.workflow.actions.gettext', UUID=no, WFTextActionText='no'),
+        set_variable('Finished', output(no, 'Text')),
         action('is.workflow.actions.repeat.count', GroupingIdentifier=repeat, WFControlFlowMode=0, WFRepeatCount=TURNS),
+        # Nothing may stop the shortcut early: Siri says "That's done" after a Stop action. Once the
+        # reply says stop, Finished turns the remaining turns into no-ops and the loop runs out.
+        action('is.workflow.actions.conditional', GroupingIdentifier=guard, WFControlFlowMode=0, WFCondition=4, WFConditionalActionString='no', WFInput=named('Finished')),
         action('is.workflow.actions.downloadurl', UUID=url, WFURL=URL, WFHTTPMethod='POST', WFHTTPBodyType='JSON', ShowHeaders=True, Advanced=True,
                WFHTTPHeaders=dictionary({'Authorization': text('Bearer ' + OBJ, output(token, 'Text'))}),
                WFJSONValues=dictionary({'conversation_id': text(OBJ, variable('Conversation')), 'text': text(OBJ, variable('Said')), 'mode': text(mode)})),
@@ -89,13 +97,16 @@ def build(mode):
         action('is.workflow.actions.gettext', UUID=nxt_text, WFTextActionText=text(OBJ, output(nxt, 'Dictionary Value'))),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=0, WFCondition=4, WFConditionalActionString='stop',
                WFInput={'Type': 'Variable', 'Variable': attachment(output(nxt_text, 'Text'))}),
-        # Stop and Output: the reply becomes the shortcut's response, which Siri speaks and then stops.
-        action('is.workflow.actions.output', WFOutput=text(OBJ, variable('Reply')), WFNoOutputSurfaceBehavior='Respond'),
+        action('is.workflow.actions.gettext', UUID=yes, WFTextActionText='yes'),
+        set_variable('Finished', output(yes, 'Text')),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=1),
         action('is.workflow.actions.ask', UUID=ask, WFInputType='Text', WFAskActionPrompt=text(OBJ, variable('Reply'))),
         set_variable('Said', output(ask, 'Provided Input')),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=2),
+        action('is.workflow.actions.conditional', GroupingIdentifier=guard, WFControlFlowMode=2),
         action('is.workflow.actions.repeat.count', GroupingIdentifier=repeat, WFControlFlowMode=2),
+        # Last action = the spoken result, so the shortcut ends on it and Siri adds nothing.
+        action('is.workflow.actions.showresult', Text=text(OBJ, variable('Reply'))),
     ]
 
 def sign(unsigned, signed):
