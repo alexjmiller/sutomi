@@ -14,7 +14,7 @@ keeps answering with its own Calendar or Reminders instead.
 
 What a shortcut does (see README.md): empty Conversation and Said; up to TURNS times, POST
 {conversation_id, text, mode} with the bearer token, remember reply and conversation_id, and if `next` is
-"stop" show the reply (Siri speaks it) and stop, otherwise ask for input with the reply as the
+"stop" output the reply (Siri speaks it as the response) and stop, otherwise ask for input with the reply as the
 prompt (Siri speaks it and listens) and send what was said as the next turn.
 """
 import os
@@ -89,8 +89,8 @@ def build(mode):
         action('is.workflow.actions.gettext', UUID=nxt_text, WFTextActionText=text(OBJ, output(nxt, 'Dictionary Value'))),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=0, WFCondition=4, WFConditionalActionString='stop',
                WFInput={'Type': 'Variable', 'Variable': attachment(output(nxt_text, 'Text'))}),
-        action('is.workflow.actions.showresult', Text=text(OBJ, variable('Reply'))),
-        action('is.workflow.actions.exit'),
+        # Stop and Output: the reply becomes the shortcut's response, which Siri speaks and then stops.
+        action('is.workflow.actions.output', WFOutput=text(OBJ, variable('Reply')), WFNoOutputSurfaceBehavior='Respond'),
         action('is.workflow.actions.conditional', GroupingIdentifier=cond, WFControlFlowMode=1),
         action('is.workflow.actions.ask', UUID=ask, WFInputType='Text', WFAskActionPrompt=text(OBJ, variable('Reply'))),
         set_variable('Said', output(ask, 'Provided Input')),

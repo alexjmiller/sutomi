@@ -30,6 +30,7 @@ export const MODES = {
   events: 'For which day?',
 }
 const MAX_SPOKEN = 12
+const THATS_ALL = "That's all." // closes a readout, so Siri's own sign-off isn't the last thing heard
 
 const joinAnd = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
 const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -100,7 +101,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     const open = r.open.filter((it) => !it.done)
     if (!open.length) return finish(conv, 'read', `${r.name} is empty${r.parked.length ? `, with ${r.parked.length} parked` : ''}.`)
     const names = withMore(open.slice(0, MAX_SPOKEN).map((it) => it.text), open.length)
-    return finish(conv, 'read', `${r.name}, ${open.length} open: ${joinAnd(names)}.${r.parked.length ? ` And ${r.parked.length} parked.` : ''}`)
+    return finish(conv, 'read', `${r.name}, ${open.length} open: ${joinAnd(names)}.${r.parked.length ? ` And ${r.parked.length} parked.` : ''} ${THATS_ALL}`)
   }
   async function readCalendar(conv, range) {
     range ||= parseWhen('coming up', today()).range
@@ -111,7 +112,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     if (!items.length) return finish(conv, 'read', `Nothing ${phrase}.`)
     const line = (it) => `${it.title}${it.time ? ` at ${speakTime(it.time)}` : ''}`
     const count = items.length === 1 ? 'one thing' : `${items.length} things`
-    if (range.from === range.to) return finish(conv, 'read', `${capital(phrase)}, ${count}: ${joinAnd(withMore(items.slice(0, MAX_SPOKEN).map(line), items.length))}.`)
+    if (range.from === range.to) return finish(conv, 'read', `${capital(phrase)}, ${count}: ${joinAnd(withMore(items.slice(0, MAX_SPOKEN).map(line), items.length))}. ${THATS_ALL}`)
     const byDay = new Map()
     for (const it of items.slice(0, MAX_SPOKEN)) {
       const day = it.date < range.from ? range.from : it.date
@@ -120,7 +121,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     }
     const days = [...byDay].map(([day, lines]) => `${capital(speakDate(day, today()))}: ${joinAnd(lines)}.`)
     const more = items.length > MAX_SPOKEN ? ` And ${items.length - MAX_SPOKEN} more.` : ''
-    return finish(conv, 'read', `${capital(phrase)}, ${count}. ${days.join(' ')}${more}`)
+    return finish(conv, 'read', `${capital(phrase)}, ${count}. ${days.join(' ')}${more} ${THATS_ALL}`)
   }
 
   // ---- understanding ----------------------------------------------------------------------------
