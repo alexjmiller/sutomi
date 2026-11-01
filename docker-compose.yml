@@ -10,6 +10,8 @@ services:
       - SUTOMI_PASSWORD=${SUTOMI_PASSWORD:-}
       - EVENTHORIZON_API_TOKEN=${EVENTHORIZON_API_TOKEN:-}
       - EVENTHORIZON_TEST_TOKEN=${EVENTHORIZON_TEST_TOKEN:-}
+      # Server-to-server access for sutomi-mcp (Authorization: Bearer); never used by the browser
+      - SUTOMI_API_TOKEN=${SUTOMI_API_TOKEN:-}
       # Event Horizon containers share the proxy network; talk to them directly rather than via Cloudflare
       - EH_API_URL=http://eventhorizon-api:3000
       - EH_INTERVIEW_URL=http://eventhorizon-interview:3000
@@ -27,6 +29,31 @@ services:
       - "traefik.http.middlewares.sutomi-www.redirectregex.regex=^https?://www\\.sutomi\\.net/(.*)"
       - "traefik.http.middlewares.sutomi-www.redirectregex.replacement=https://sutomi.net/$${1}"
       - "traefik.http.middlewares.sutomi-www.redirectregex.permanent=true"
+
+  # sutomi-mcp: MCP server + voice conversation service (sutomi-mcp/), on the same host under /mcp and /voice
+  sutomi-mcp:
+    build: ./sutomi-mcp
+    image: sutomi-mcp:latest
+    container_name: sutomi-mcp
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - SUTOMI_URL=http://sutomi:3000
+      - SUTOMI_TOKEN=${SUTOMI_API_TOKEN:-}
+      - MCP_TOKEN=${SUTOMI_MCP_TOKEN:-}
+      - VOICE_TOKEN=${SUTOMI_VOICE_TOKEN:-}
+      - ALLOWED_HOSTS=sutomi.net
+    depends_on:
+      - sutomi
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sutomi-mcp.rule=Host(`sutomi.net`) && (PathPrefix(`/mcp`) || PathPrefix(`/voice`))"
+      - "traefik.http.routers.sutomi-mcp.priority=100"
+      - "traefik.http.routers.sutomi-mcp.entrypoints=websecure"
+      - "traefik.http.routers.sutomi-mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sutomi-mcp.loadbalancer.server.port=3000"
 
 volumes:
   sutomi-data:

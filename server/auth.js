@@ -8,8 +8,11 @@
 //   (403). If every device is lost, clear data/passkeys.json on the server to reopen it.
 // - Adding or removing a passkey needs a sign-in within the last few minutes (the client re-asserts).
 //
+// - An API token (SUTOMI_API_TOKEN) is accepted as `Authorization: Bearer …` by requireAuth for
+//   server-to-server use (sutomi-mcp). It never counts as a fresh sign-in, so it cannot touch passkeys.
+//
 // Env: SUTOMI_RP_ID (default sutomi.net in production, localhost in dev), SUTOMI_ORIGIN (comma list;
-// default https://sutomi.net or the local dev origins), SUTOMI_PASSWORD (bootstrap only).
+// default https://sutomi.net or the local dev origins), SUTOMI_PASSWORD (bootstrap only), SUTOMI_API_TOKEN.
 import { Router } from 'express'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
@@ -47,6 +50,7 @@ const PROVIDERS = {
 }
 
 const sha = (s) => createHash('sha256').update(s).digest('hex')
+const sameSecret = (a, b) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest())
 const now = () => Date.now()
 
 function jsonFile(path, empty) {
@@ -102,7 +106,7 @@ function rateLimiter({ max, windowMs }) {
   }
 }
 
-export function authRouter({ dataDir, password }) {
+export function authRouter({ dataDir, password, apiToken = '' }) {
   const passkeys = jsonFile(join(dataDir, 'passkeys.json'), { userId: null, credentials: [] })
   const sessions = jsonFile(join(dataDir, 'sessions.json'), [])
   const challenges = new Map() // challenge -> { kind, expires }
@@ -153,8 +157,16 @@ export function authRouter({ dataDir, password }) {
     sessions.write(liveSessions().filter((s) => s.hash !== session.hash))
   }
 
-  /** Express middleware: a valid session cookie or 401. */
+  /** Express middleware: a valid session cookie, or the API token as a bearer, or 401. */
   function requireAuth(req, res, next) {
+    const header = req.headers.authorization
+    if (header !== undefined) {
+      // A bearer request is judged on the token alone (the cookie is ignored). verifiedAt 0 = never fresh.
+      const given = String(header).startsWith('Bearer ') ? String(header).slice(7).trim() : ''
+      if (!apiToken || !given || !sameSecret(given, apiToken)) { log(req, 'api token refused'); return res.status(401).json({ error: 'unauthorized' }) }
+      req.session = { via: 'token', createdAt: 0, verifiedAt: 0, expiresAt: null }
+      return next()
+    }
     const session = sessionOf(req)
     if (!session) return res.status(401).json({ error: 'unauthorized' })
     req.session = session
@@ -162,6 +174,7 @@ export function authRouter({ dataDir, password }) {
   }
   /** Changing the passkey list needs a recent sign-in — unless there is nothing to protect yet. */
   function requireFresh(req, res, next) {
+    if (req.session.via === 'token') return res.status(403).json({ error: 'passkeys cannot be managed with the API token' })
     if (store().credentials.length === 0) return next()
     if (now() - req.session.verifiedAt > FRESH_MS) return res.status(403).json({ error: 'reauth' })
     next()
