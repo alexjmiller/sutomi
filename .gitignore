@@ -31,3 +31,7 @@ data/sessions.json
 
 # secrets (Event Horizon tokens etc.)
 .env
+
+# sutomi-mcp: generated Shortcut files and the screenshot (it shows the voice token)
+sutomi-mcp/shortcut/*.shortcut
+sutomi-mcp/shortcut.png

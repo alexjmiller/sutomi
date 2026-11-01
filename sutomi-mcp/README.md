@@ -39,7 +39,9 @@ In production all of these come from `/data/sutomi/.env` through `docker-compose
 
 ## The Siri Shortcut
 
-Make a Shortcut called **sutomi** (so "Hey Siri, sutomi" runs it) with these actions. Get the token by running `ssh dedibox "grep ^SUTOMI_VOICE_TOKEN= /data/sutomi/.env"` in your own terminal.
+The easiest way is the generated file: `SIGN_HOST=devbook python3 shortcut/build.py` writes and signs `shortcut/sutomi.shortcut` (signing needs a Mac signed into iCloud, so dev.lan hands it to devbook over ssh). AirDrop it to the phone, tap **Add Shortcut**, open it and replace the `PASTE-VOICE-TOKEN-HERE` text with the token from `ssh dedibox "grep ^SUTOMI_VOICE_TOKEN= /data/sutomi/.env"`. The file never contains the token.
+
+Built by hand, the Shortcut is called **sutomi** (so "Hey Siri, sutomi" runs it) and has these actions:
 
 1. **Text** — leave empty → **Set Variable** `Conversation`
 2. **Text** — leave empty → **Set Variable** `Said` (the first request carries no text; the server asks "What would you like to add?")
@@ -52,6 +54,8 @@ Make a Shortcut called **sutomi** (so "Hey Siri, sutomi" runs it) with these act
    5. **Otherwise** — **Ask for Input** (Text) with Prompt `Reply` → **Set Variable** `Said` (when the Shortcut runs by voice, Siri speaks the prompt and listens for the answer)
    6. **End If**
 4. **End Repeat**
+
+Things that silently break it: the body must reference the **variables** `Conversation` and `Said` (not the empty Text actions they were first set from); `Conversation` must be set from the `conversation_id` dictionary value and nothing else, or every turn starts a new conversation; the If must compare the `next` dictionary value; and one Ask per turn. The service log shows each call as `new`, `resumed` or `lost` with the length of the text it received (`docker logs sutomi-mcp | grep voice`), which is the first thing to look at when the phone keeps hearing "What would you like to add?".
 
 A conversation then goes: "What would you like to add?" — "milk to the shopping list" — "Add milk to Shopping?" — "yes" — "Added milk to Shopping." You can say the whole thing in one go ("add call the plumber to house jobs"), answer with just the task and be asked for the list, or say no at the question to stop. Lists are never created by voice; make them on the site first.
 

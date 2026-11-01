@@ -33,6 +33,7 @@ app.set('trust proxy', 1) // Traefik in front
 app.disable('x-powered-by')
 app.use((_req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'no-store'); next() })
 app.use(express.json({ limit: '1mb' }))
+app.use(express.urlencoded({ extended: false, limit: '1mb' })) // a Shortcut whose body is set to Form still works
 
 app.get('/health', (_req, res) => res.json({ ok: true }))
 
@@ -45,12 +46,18 @@ app.all('/mcp', bearerAuth(process.env.MCP_TOKEN, { name: 'mcp', log: log('auth'
   void mcpNode(req, res, req.body)
 })
 
-// Voice: one turn per request.
+// Voice: one turn per request. The log line says how the call related to a conversation —
+// `new` (no id sent), `resumed` (id known), `lost` (id sent but unknown or expired) — and how much
+// text came with it, never the text itself; a body that didn't parse shows its content-type.
 const voiceAuth = bearerAuth(process.env.VOICE_TOKEN, { name: 'voice', log: log('auth'), limiter })
 app.post('/voice', voiceAuth, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {}
-  const out = await voice.handle({ conversation_id: body.conversation_id, text: body.text })
-  log('voice')(`${visitorIp(req)} ${out.conversation_id} ${out.finished ? 'finished' : 'listening'}`)
+  const given = body.conversation_id == null ? '' : String(body.conversation_id).trim()
+  const text = body.text == null ? '' : String(body.text)
+  const out = await voice.handle({ conversation_id: given, text })
+  const how = !given ? 'new' : out.conversation_id === given ? 'resumed' : 'lost'
+  const shape = Object.keys(body).length ? `text:${text.trim().length}` : `no body (${req.headers['content-type'] || 'no content-type'})`
+  log('voice')(`${visitorIp(req)} ${out.conversation_id} ${how} ${shape} ${out.finished ? 'finished' : 'listening'}`)
   res.json(out)
 })
 app.get('/voice/:id', voiceAuth, (req, res) => {
