@@ -201,25 +201,29 @@ export function buildServer(sutomi, { now = Date.now } = {}) {
       title: z.string().trim().min(1).max(200).describe('The task or event, as the user said it'),
       kind: z.enum(['task', 'event']).optional().describe('task (completable, default) or event (a thing happening)'),
       date: dateInput('The day'),
-      time: z.string().regex(HHMM).optional().describe(`HH:MM in ${ZONE}; omit for an all-day task`),
-      duration_minutes: z.number().int().min(5).max(720).optional().describe('With a time only; default 60'),
+      time: z.string().regex(HHMM).optional().describe(`HH:MM in ${ZONE}; omit for an all-day item`),
+      end_time: z.string().regex(HHMM).optional().describe('HH:MM, after time; sets the duration'),
+      duration_minutes: z.number().int().min(5).max(720).optional().describe('With a time only; default 60 (ignored when end_time is given)'),
       request_key: z.string().min(8).max(200).optional().describe('Unique per request; repeating it is safe'),
     }),
     outputSchema: z.object({ created: z.boolean(), item: CalendarItem }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, async ({ title, kind = 'task', date, time, duration_minutes = 60, request_key }) => {
+  }, async ({ title, kind = 'task', date, time, end_time, duration_minutes = 60, request_key }) => {
+    if (end_time && !time) return fail('end_time needs a time.')
+    if (end_time && end_time <= time) return fail('end_time must be after time.')
+    const minutes = end_time ? (Number(end_time.slice(0, 2)) * 60 + Number(end_time.slice(3))) - (Number(time.slice(0, 2)) * 60 + Number(time.slice(3))) : duration_minutes
     const remembered = request_key && recentCalendarAdds.get(request_key)
     if (remembered) return ok(`${remembered.title} was already on the calendar for ${whenText(remembered)}.`, { created: false, item: remembered })
     const twin = (await fetchRange({ from: date, to: date, kinds: [kind], query: title, includeCompleted: false })).find((it) => sameTitle(it.title, title) && (it.time || null) === (time || null))
     if (twin) return ok(`${twin.title} was already on the calendar for ${whenText(twin)}.`, { created: false, item: twin })
     const common = { title, kind, tags: ['sutomi'], metadata: { sutomi: { via: 'mcp', ...(request_key ? { request_key } : {}) } } }
     const body = time
-      ? { time_type: 'timed', timezone: ZONE, dtstart_local: `${date}T${time}:00`, duration_seconds: duration_minutes * 60, ...common }
+      ? { time_type: 'timed', timezone: ZONE, dtstart_local: `${date}T${time}:00`, duration_seconds: minutes * 60, ...common }
       : { time_type: 'all_day', start_date: date, end_date: addDays(date, 1), ...common }
     const ev = await sutomi.ehCreateEvent(body)
     const offset = !time ? 9 * 3600 : kind === 'event' ? -30 * 60 : 0
     try { await sutomi.ehAddReminder(ev.id, { trigger: 'relative', offset_seconds: offset }) } catch { /* the item exists; a missing reminder is not worth failing the add */ }
-    const item = { id: ev.id, event_id: ev.id, title: ev.title, kind, date, ...(time ? { time } : {}), completed: false, chain: null }
+    const item = { id: ev.id, event_id: ev.id, title: ev.title, kind, date, ...(time ? { time } : {}), ...(end_time ? { end_time } : {}), completed: false, chain: null }
     if (request_key) {
       recentCalendarAdds.set(request_key, item)
       if (recentCalendarAdds.size > 500) recentCalendarAdds.delete(recentCalendarAdds.keys().next().value)

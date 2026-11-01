@@ -14,7 +14,7 @@ function fakeTools(lists, calendar = []) {
     if (name === 'add_calendar_task') {
       const existing = calendar.find((it) => it.key === args.request_key)
       if (existing) return { created: false, item: existing }
-      const item = { id: String(calendar.length + 1), title: args.title, date: args.date, ...(args.time ? { time: args.time } : {}), key: args.request_key }
+      const item = { id: String(calendar.length + 1), title: args.title, date: args.date, ...(args.time ? { time: args.time } : {}), ...(args.end_time ? { end_time: args.end_time } : {}), key: args.request_key }
       calendar.push(item)
       return { created: true, item }
     }
@@ -226,4 +226,16 @@ test('modes: each Shortcut opens with its own question and keeps to its job', as
   assert.equal(j.reply, 'Which list: Shopping, House or House jobs?')
   const k = await v.handle({ text: 'nonsense', mode: 'nonsense' })
   assert.equal(k.reply, 'Which list: Shopping, House or House jobs?') // an unknown mode is the mixed script
+})
+
+test('event mode: a time span becomes start and end', async () => {
+  const cal = []
+  const t = fakeTools(LISTS, cal)
+  const v = createVoice({ call: t.call, now: () => NOW })
+  const a = await v.handle({ text: "UX Brighton on Friday at 9 o’clock till 7 o'clock", mode: 'event' })
+  assert.equal(a.reply, 'Add UX Brighton for Friday at 9am to 7pm. Is that correct?')
+  const b = await v.handle({ conversation_id: a.conversation_id, text: 'yes' })
+  assert.equal(b.reply, 'Added UX Brighton for Friday at 9am to 7pm.')
+  const args = t.calls.find((c) => c.name === 'add_calendar_task').args
+  assert.deepEqual([args.title, args.kind, args.date, args.time, args.end_time], ['UX Brighton', 'event', '2026-11-06', '09:00', '19:00'])
 })

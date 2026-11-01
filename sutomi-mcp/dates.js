@@ -65,7 +65,10 @@ const DATE_RE = new RegExp([
   '(?<y4>\\d{4})-(?<m4>\\d{2})-(?<d4>\\d{2})',
 ].map((s) => `(?:\\b${s}\\b)`).join('|'), 'i')
 const RANGE_RE = /\b(?:(?<week>this week|the rest of the week|next week|the week after next)|(?<wkend>(?:this |next |the |at the )?weekend)|(?<month>this month|next month)|(?:(?:the |in the )?next (?<n>\d+|few|couple of|two|three|four|five|six|seven|ten|fourteen) (?<u>days|weeks))|(?<soon>coming up|upcoming|on the horizon))\b/i
-const TIME_RE = /\b(?:at |@ ?)?(?:(?<noon>noon|midday)|(?<midn>midnight)|(?<h>\d{1,2})(?:[:.](?<mi>\d{2}))?\s*(?<ap>am|pm|a\.m\.|p\.m\.|o'?clock)?)\b/i
+const TIME_CORE = "(?:(?<noon>noon|midday)|(?<midn>midnight)|(?<h>\\d{1,2})(?:[:.](?<mi>\\d{2}))?\\s*(?<ap>am|pm|a\\.m\\.|p\\.m\\.|o[’']?clock)?)"
+// A time needs a lead word ("at 10") or am/pm, so "buy 10 eggs" stays a task; a span may follow ("till 7").
+const TIME_START = new RegExp(`(?:at |from |between |@ ?|(?=\\d{1,2}(?:[:.]\\d{2})?\\s*(?:am|pm)\\b))${TIME_CORE}\\b`, 'i')
+const TIME_END = new RegExp(`^\\s*(?:till|until|to|-|–|and)\\s*${TIME_CORE}\\b`, 'i')
 
 function resolveDate(g, today) {
   const dow = weekday(today)
@@ -107,8 +110,31 @@ function resolveTime(g) {
   const ap = (g.ap || '').toLowerCase()
   if (ap.startsWith('p') && h < 12) h += 12
   else if (ap.startsWith('a') && h === 12) h = 0
-  else if (!ap && h >= 1 && h <= 6) h += 12 // "at 3" is far more often 3pm than 3am
+  else if (!ap.startsWith('a') && h >= 1 && h <= 6) h += 12 // "at 3" is far more often 3pm than 3am
   return `${pad(h)}:${pad(mi)}`
+}
+/** "at 9 till 7" from `index` on → { time, end_time, index, length }, or null. An end before the start rolls to the afternoon. */
+function timeSpan(str, from = 0) {
+  const re = new RegExp(TIME_START.source, 'gi')
+  re.lastIndex = from
+  const m = re.exec(str)
+  if (!m) return null
+  const time = resolveTime(m.groups)
+  if (!time) return null
+  let length = m[0].length, end_time = null
+  const e = TIME_END.exec(str.slice(m.index + length))
+  if (e) {
+    end_time = resolveTime(e.groups)
+    if (end_time && end_time <= time && Number(end_time.slice(0, 2)) < 12) end_time = `${pad(Number(end_time.slice(0, 2)) + 12)}:${end_time.slice(3)}`
+    if (end_time && end_time > time) length += e[0].length
+    else end_time = null
+  }
+  return { time, end_time, index: m.index, length }
+}
+/** The last time span in `str`. */
+function lastTimeSpan(str) {
+  let last = null
+  for (let from = 0; ;) { const t = timeSpan(str, from); if (!t) return last; last = t; from = t.index + t.length }
 }
 
 /** Monday of the week containing `iso`. */
@@ -145,8 +171,9 @@ function resolveRange(g, today) {
 
 /**
  * Find a day (or a span of days) and a time in dictated text.
- * → { date, time, start, end } for "tomorrow at 3", { range: {from,to,label}, start, end } for "next week",
- *   or null. `start`/`end` are the character span to cut out of the text. A time alone is not a date.
+ * → { date, time, end_time, start, end } for "tomorrow at 3", "Friday at 9 till 7" or "Friday from 9am to 7pm",
+ *   { range: {from,to,label}, start, end } for "next week", or null. `start`/`end` are the character span
+ *   to cut out of the text. A time alone is not a date.
  */
 export function parseWhen(text, today) {
   const s = String(text || '')
@@ -156,16 +183,15 @@ export function parseWhen(text, today) {
   if (!m) return null
   const date = resolveDate(m.groups, today)
   if (!date) return { invalid: true, start: m.index, end: m.index + m[0].length }
-  let start = m.index, end = m.index + m[0].length, time = null
+  let start = m.index, end = m.index + m[0].length, time = null, end_time = null
   const before = s.slice(0, start), after = s.slice(end)
-  const ta = TIME_RE.exec(after)
-  if (ta && /^\s*(?:at |@)/i.test(after.slice(ta.index)) && !after.slice(0, ta.index).trim()) { time = resolveTime(ta.groups); end += ta.index + ta[0].length }
+  const ta = timeSpan(after)
+  if (ta && !after.slice(0, ta.index).trim()) { ({ time, end_time } = ta); end += ta.index + ta.length }
   else {
-    const tb = [...before.matchAll(new RegExp(TIME_RE.source, 'gi'))].pop()
-    if (tb && /^(?:at |@)/i.test(tb[0]) && !before.slice(tb.index + tb[0].length).replace(/^\s+(?:on|for)?\s*$/, '').trim()) { time = resolveTime(tb.groups); start = tb.index }
+    const tb = lastTimeSpan(before)
+    if (tb && /^\s*(?:on|for)?\s*$/i.test(before.slice(tb.index + tb.length))) { ({ time, end_time } = tb); start = tb.index }
   }
-  if (!time && m.groups.dpart) time = null
-  return { date, time, start, end }
+  return { date, time, end_time, start, end }
 }
 
 // ---- speaking ----------------------------------------------------------------------------------

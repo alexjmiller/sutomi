@@ -102,10 +102,10 @@ export function parseUtterance(text, lists, today) {
       if (atEnd || atStart) {
         let task = leadingDate ? t : tidy(atEnd ? t.slice(0, when.start) : t.slice(when.end))
         task = tidy(task.replace(/\s+(?:on|for|by|at)$/i, '').replace(/^(?:on|for|by|at)\s+/i, ''))
-        if (task) return { kind: 'add_calendar', task, date: when.date, time: when.time || null }
+        if (task) return { kind: 'add_calendar', task, date: when.date, time: when.time || null, end_time: when.end_time || null }
       }
     }
-    if (explicit) return { kind: 'add_calendar', task: t, date: null, time: null }
+    if (explicit) return { kind: 'add_calendar', task: t, date: null, time: null, end_time: null }
     return { kind: 'add_list', ...parseAdd(raw, lists) }
   }
   const read = parseRead(raw, lists, today)
@@ -113,7 +113,7 @@ export function parseUtterance(text, lists, today) {
   return { kind: 'add_list', ...parseAdd(raw, lists) }
 }
 
-/** "call the dentist tomorrow at 2.30" → { task, date, time } (date null when none was said). */
+/** "call the dentist tomorrow at 2.30" → { task, date, time, end_time } (date null when none was said). */
 export function parseEvent(text, today) {
   const t = tidy(tidy(tidy(String(text || '')).replace(LEAD, '')).replace(CAL_SUFFIX, ''))
   const when = parseWhen(t, today)
@@ -121,8 +121,8 @@ export function parseEvent(text, today) {
     const atEnd = !tidy(t.slice(when.end)), atStart = when.start === 0
     if (atEnd || atStart) {
       const task = tidy(tidy(atEnd ? t.slice(0, when.start) : t.slice(when.end)).replace(/\s+(?:on|for|by|at)$/i, '').replace(/^(?:on|for|by|at)\s+/i, ''))
-      return { task, date: when.date, time: when.time || null }
+      return { task, date: when.date, time: when.time || null, end_time: when.end_time || null }
     }
   }
-  return { task: t, date: null, time: null }
+  return { task: t, date: null, time: null, end_time: null }
 }

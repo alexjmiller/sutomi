@@ -51,10 +51,10 @@ test('parseUtterance: lists, calendar adds and reads', () => {
   const T = '2026-11-04'
   const u = (s) => parseUtterance(s, lists, T)
   assert.equal(u('add milk to shopping').kind, 'add_list')
-  assert.deepEqual(u('add call mum on friday at 10'), { kind: 'add_calendar', task: 'call mum', date: '2026-11-06', time: '10:00' })
-  assert.deepEqual(u('tomorrow add call the plumber'), { kind: 'add_calendar', task: 'call the plumber', date: '2026-11-05', time: null })
-  assert.deepEqual(u('add dentist on the 3rd of march to the calendar'), { kind: 'add_calendar', task: 'dentist', date: '2027-03-03', time: null })
-  assert.deepEqual(u('add book the car in to the calendar'), { kind: 'add_calendar', task: 'book the car in', date: null, time: null })
+  assert.deepEqual(u('add call mum on friday at 10'), { kind: 'add_calendar', task: 'call mum', date: '2026-11-06', time: '10:00', end_time: null })
+  assert.deepEqual(u('tomorrow add call the plumber'), { kind: 'add_calendar', task: 'call the plumber', date: '2026-11-05', time: null, end_time: null })
+  assert.deepEqual(u('add dentist on the 3rd of march to the calendar'), { kind: 'add_calendar', task: 'dentist', date: '2027-03-03', time: null, end_time: null })
+  assert.deepEqual(u('add book the car in to the calendar'), { kind: 'add_calendar', task: 'book the car in', date: null, time: null, end_time: null })
   assert.equal(u('add 10 eggs to shopping').task, '10 eggs')
   assert.equal(u('add plan the holiday next week').kind, 'add_list') // a span is not a day
   assert.deepEqual(u("what's on tomorrow").range, { from: '2026-11-05', to: '2026-11-05', date: '2026-11-05' })

@@ -71,3 +71,16 @@ test('zone maths across DST', () => {
   assert.deepEqual(localOf('2026-07-05T09:00:00Z'), { date: '2026-07-05', time: '10:00' })
   assert.equal(addDays('2026-12-31', 1), '2027-01-01'); assert.equal(weekday(T), 3)
 })
+
+test('time spans and dictated apostrophes', () => {
+  const a = when("UX Brighton on Friday at 9 o’clock till 7 o'clock")
+  assert.deepEqual([a.date, a.time, a.end_time], ['2026-11-06', '09:00', '19:00'])
+  assert.equal("UX Brighton on Friday at 9 o’clock till 7 o'clock".slice(0, a.start).trim(), 'UX Brighton')
+  assert.deepEqual([when('lunch on friday from 12 to 1').time, when('lunch on friday from 12 to 1').end_time], ['12:00', '13:00'])
+  const b = when('conference friday 9am to 5.30pm')
+  assert.deepEqual([b.time, b.end_time], ['09:00', '17:30'])
+  const c = when('from 9 until 11 on friday call mum')
+  assert.deepEqual([c.date, c.time, c.end_time, 'from 9 until 11 on friday call mum'.slice(c.end).trim()], ['2026-11-06', '09:00', '11:00', 'call mum'])
+  assert.deepEqual([when('go to the gym tomorrow at 7').time, when('go to the gym tomorrow at 7').end_time], ['07:00', null])
+  assert.equal(when('add tea at 4 to shopping tomorrow').end_time, null)
+})

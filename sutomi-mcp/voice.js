@@ -67,7 +67,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     if (range.label.endsWith('weekend')) return `at ${range.label}`
     return range.label
   }
-  const whenWords = (date, time) => `${speakDate(date, today())}${time ? ` at ${speakTime(time)}` : ''}`
+  const whenWords = (date, time, end) => `${speakDate(date, today())}${time ? ` at ${speakTime(time)}${end ? ` to ${speakTime(end)}` : ''}` : ''}`
 
   // ---- drafts ---------------------------------------------------------------------------------
   function newDraft(conv, draft) {
@@ -80,9 +80,9 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     newDraft(conv, { type: 'list', list: { id: list.id, name: list.name }, task })
     return `Add ${task} to ${list.name}. Is that correct?`
   }
-  function toConfirmCalendar(conv, task, date, time) {
-    newDraft(conv, { type: 'calendar', kind: conv.mode === 'event' ? 'event' : 'task', task, date, time })
-    return `Add ${task} for ${whenWords(date, time)}. Is that correct?`
+  function toConfirmCalendar(conv, task, date, time, end_time = null) {
+    newDraft(conv, { type: 'calendar', kind: conv.mode === 'event' ? 'event' : 'task', task, date, time, end_time: time ? end_time : null })
+    return `Add ${task} for ${whenWords(date, time, end_time)}. Is that correct?`
   }
   function askList(conv, candidates, prefix = '') {
     conv.candidates = candidates
@@ -141,7 +141,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
     if (u.kind === 'need_day') return miss(conv, 'Which day? Say today, tomorrow, a weekday, next week, or a date.')
     if (u.kind === 'add_calendar') {
       if (!u.task) { conv.step = 'need_text'; return conv.mode === 'event' ? "What's the event?" : 'What is the task?' }
-      return u.date ? toConfirmCalendar(conv, u.task, u.date, u.time) : askDay(conv, u.task)
+      return u.date ? toConfirmCalendar(conv, u.task, u.date, u.time, u.end_time) : askDay(conv, u.task)
     }
     // add_list
     if (!u.task) { conv.step = 'need_text'; return 'What is the task?' }
@@ -170,8 +170,8 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
   async function commit(conv) {
     const d = conv.draft
     if (d.type === 'calendar') {
-      const r = await call('add_calendar_task', { title: d.task, kind: d.kind, date: d.date, ...(d.time ? { time: d.time } : {}), request_key: d.request_key })
-      const when = whenWords(r.item.date, r.item.time)
+      const r = await call('add_calendar_task', { title: d.task, kind: d.kind, date: d.date, ...(d.time ? { time: d.time } : {}), ...(d.end_time ? { end_time: d.end_time } : {}), request_key: d.request_key })
+      const when = whenWords(r.item.date, r.item.time, r.item.end_time)
       return finish(conv, r.created ? 'added' : 'already-added', r.created ? `Added ${r.item.title} for ${when}.` : `${r.item.title} was already on the calendar for ${when}.`)
     }
     const r = await call('add_task', { list_id: d.list.id, text: d.task, request_key: d.request_key })
@@ -189,7 +189,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
   /** The reply restated a whole request ("add X to Y", "add X tomorrow") — start that draft instead. */
   async function restated(conv, text) {
     const u = parseUtterance(text, await lists(conv), today())
-    if (u.kind === 'add_calendar' && u.task && u.date) return toConfirmCalendar(conv, u.task, u.date, u.time)
+    if (u.kind === 'add_calendar' && u.task && u.date) return toConfirmCalendar(conv, u.task, u.date, u.time, u.end_time)
     if (u.kind === 'add_list' && u.listName && u.matches.length === 1) return toConfirmList(conv, u.matches[0], u.task)
     return null
   }
@@ -225,7 +225,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
       const again = await restated(conv, text)
       if (again) return again
       const w = parseWhen(text, today())
-      if (w?.date) return toConfirmCalendar(conv, conv.task, w.date, w.time)
+      if (w?.date) return toConfirmCalendar(conv, conv.task, w.date, w.time, w.end_time)
       if (w?.range) return miss(conv, `Which day ${inWords(w.range)}?`)
       return miss(conv, 'I didn\'t catch the day. Say something like tomorrow, Friday, or the 12th of March.')
     }
@@ -235,7 +235,7 @@ export function createVoice({ call, now = Date.now, ttlMs = 10 * 60 * 1000, keep
       const again = await restated(conv, text)
       if (again) return again
       const d = conv.draft
-      return miss(conv, `Say yes to add ${d.task} ${d.type === 'calendar' ? `for ${whenWords(d.date, d.time)}` : `to ${d.list.name}`}, or no to cancel.`)
+      return miss(conv, `Say yes to add ${d.task} ${d.type === 'calendar' ? `for ${whenWords(d.date, d.time, d.end_time)}` : `to ${d.list.name}`}, or no to cancel.`)
     }
     return giveUp(conv)
   }
