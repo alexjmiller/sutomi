@@ -6,7 +6,7 @@ import { DateTime } from 'luxon'
 import * as api from './api'
 import {
   CATEGORIES, instanceTag, nodeId, isAnchor, isChainTask, isBand, isTransparent, isBirthday, ageOn, hasTag, kindOf, isTask, isInfo,
-  startOf, endOf, fmtTime, fmtDay, fmtMonth, fmtShortIso, spellIso, whenText, monthGrid, horizon, beyondHorizon, tintFor, byDay, sortByStart, dedupe,
+  startOf, endOf, fmtTime, fmtDay, fmtMonth, fmtShortIso, spellIso, whenText, monthGrid, horizon, beyondHorizon, tintFor, byDay, dedupe, chainFor,
 } from './time'
 import { SpaceBar } from './SpaceBar'
 
@@ -410,7 +410,7 @@ function DayList({ iso, items, label, onSelect, onToggle, onClose }) {
 function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChanged }) {
   const tag = instanceTag(item.tags)
   const node = nodes.get(nodeId(item.tags))
-  const [chain, setChain] = useState(null)
+  const [all, setAll] = useState(null) // everything with the instance tag over the horizon (every year of it)
   const [detail, setDetail] = useState(null)
   const [problem, setProblem] = useState(null)
   const [removing, setRemoving] = useState(false)
@@ -418,11 +418,11 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChange
 
   useEffect(() => {
     let on = true
-    if (!chainGen) { setChain(null); setDetail(null); setProblem(null) }
+    if (!chainGen) { setAll(null); setDetail(null); setProblem(null) }
     if (tag) {
       const h = horizon()
       api.fetchAll({ tags: tag, from: utcIso(h.from), to: utcIso(h.to), limit: 100 })
-        .then((items) => on && setChain(sortByStart(items)))
+        .then((items) => on && setAll(items))
         .catch((e) => on && setProblem(e.message))
     }
     if (isAnchor(item) && !chainGen) api.getEvent(item.event_id).then((d) => on && setDetail(d)).catch(() => {})
@@ -431,12 +431,13 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChange
 
   // Keep the timeline in step with optimistic completes.
   const toggle = async (it) => {
-    setChain((c) => c && c.map((x) => (x.event_id === it.event_id ? { ...x, completed_at: it.completed_at ? null : new Date().toISOString() } : x)))
+    setAll((c) => c && c.map((x) => (x.event_id === it.event_id ? { ...x, completed_at: it.completed_at ? null : new Date().toISOString() } : x)))
     await onToggle(it)
   }
 
-  const anchor = chain?.find(isAnchor)
-  const openTasks = chain ? chain.filter((x) => isChainTask(x) && !x.completed_at).length : 0
+  // Only this occurrence's chain: a yearly instance has a chain per year and the horizon holds more than one.
+  const { anchor, chain, others } = useMemo(() => (all ? chainFor(all, item) : { anchor: null, chain: null, others: 0 }), [all, item])
+  const openTasks = all ? all.filter((x) => isChainTask(x) && !x.completed_at).length : 0 // the whole instance goes when removed, every year of it
   const slots = detail?.metadata?.ehn?.slots
 
   async function remove() {
@@ -494,6 +495,7 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChange
               ))}
             </ol>
           )}
+          {others > 0 && <p className="eh-muted">this time round · the chain repeats with the event{others === 1 ? '' : `, ${others} more on the map`}</p>}
           {chain && <AddStep tag={tag} anchorDate={anchor ? startOf(anchor).toISODate() : startOf(item).toISODate()} onAdded={() => { setChainGen((g) => g + 1); onChanged() }} />}
           <button type="button" className="eh-text-btn eh-danger" disabled={removing || !chain} onClick={remove}>
             {removing ? 'removing…' : 'remove this whole chain'}

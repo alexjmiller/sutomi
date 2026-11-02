@@ -125,6 +125,34 @@ export function byDay(items) {
   return map
 }
 
+const instant = (iso) => (iso ? Date.parse(iso) : NaN)
+
+/**
+ * One occurrence of a chain: the anchor occurrence the item belongs to and the steps derived from it.
+ * A recurring instance (a birthday) has an anchor per year and a chain per anchor; `items` is everything
+ * with the instance tag over the horizon. Each generated task says which anchor occurrence it came from
+ * (`source_occurrence_at`, the anchor's recurrence instant); a task without it is given to the next
+ * anchor after it, since steps run up to their event.
+ */
+export function chainFor(items, item) {
+  const sorted = sortByStart(items)
+  const anchors = sorted.filter(isAnchor)
+  if (!anchors.length) return { anchor: null, chain: sorted, others: 0 }
+  const anchorOf = (x) => {
+    if (isAnchor(x)) return x
+    const src = instant(x.source_occurrence_at)
+    if (Number.isFinite(src)) {
+      const hit = anchors.find((a) => instant(a.starts_at) === src)
+      if (hit) return hit
+    }
+    const at = startOf(x)
+    return anchors.find((a) => startOf(a) >= at) || anchors[anchors.length - 1]
+  }
+  const anchor = anchorOf(item)
+  const chain = sorted.filter((x) => anchorOf(x).occurrence_id === anchor.occurrence_id)
+  return { anchor, chain, others: anchors.length - 1 }
+}
+
 export function dedupe(items) {
   const seen = new Set()
   return items.filter((it) => (seen.has(it.occurrence_id) ? false : (seen.add(it.occurrence_id), true)))
