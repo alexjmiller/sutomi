@@ -262,7 +262,11 @@ function Check({ item, onToggle }) {
       aria-label={item.completed_at ? `reopen: ${item.title}` : `complete: ${item.title}`}
       onClick={(e) => { e.stopPropagation(); onToggle(item) }}
     >
-      {item.completed_at ? '✓' : ''}
+      {item.completed_at && (
+        <svg className="eh-tick" viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M3.5 9.5 L7.5 13.5 L15 4.5" />
+        </svg>
+      )}
     </button>
   )
 }

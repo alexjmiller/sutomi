@@ -620,21 +620,29 @@ button.eh-cell {
   flex: 0 0 auto;
 }
 
+/* A ruled box that stays a box: done = a pen tick inside it, not a filled square. */
 .eh-check {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
   border: 2px solid #46413d;
   background: transparent;
-  font-size: 12px;
-  line-height: 1;
   padding: 0;
   cursor: pointer;
-  color: #faf5e4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.eh-check.done {
-  background: #46413d;
+.eh-check .eh-tick {
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: none;
+  stroke: #46413d;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .eh-check:hover {
