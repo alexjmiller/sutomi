@@ -471,15 +471,21 @@
   cursor: pointer;
 }
 
+/* The calendar keeps the site's 1100px column; the detail panel sits in the margin to its right
+   (the page grows to 1100 + 32 + 340, plus its 32px padding each side) and only squeezes the grid when the screen can't fit both. */
+.eh.eh-cal {
+  max-width: 1536px;
+}
+
 .eh-cal-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1100px);
   gap: 32px;
   align-items: start;
 }
 
 .eh-cal-body.with-panel {
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1100px) 340px;
 }
 
 .eh-beyond {
