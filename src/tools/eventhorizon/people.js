@@ -17,10 +17,12 @@ export function personName(title, detail) {
 
 /**
  * Build the rows. `items` are occurrences (one window of about a year, so a yearly series shows once);
- * `details` maps event_id → the authored event (start_date, metadata) where it has arrived.
+ * `details` maps event_id → the authored event (start_date, metadata) where it has arrived; `withTasks`
+ * holds the instance tags that have chain tasks on the map, which decides celebrate vs remember when the
+ * slot is missing (instances made before the node asked — the chain itself is the record).
  * Returns rows sorted by the next birthday; `dup` marks two series for the same name and day.
  */
-export function buildPeople(items, details, now = DateTime.now()) {
+export function buildPeople(items, details, now = DateTime.now(), withTasks = new Set()) {
   const seen = new Set()
   const rows = []
   for (const it of items) {
@@ -31,10 +33,12 @@ export function buildPeople(items, details, now = DateTime.now()) {
     const birthYear = detail?.start_date ? Number(detail.start_date.slice(0, 4)) : NaN
     const known = Number.isFinite(birthYear) && birthYear < now.year
     const ehn = detail?.metadata?.ehn
-    const involvement = ehn?.slots?.involvement
+    const tag = instanceTag(it.tags)
+    const slot = ehn?.slots?.involvement
+    const involvement = slot === 'celebrate' || slot === 'remember' ? slot : tag && detail ? (withTasks.has(tag) ? 'celebrate' : 'remember') : null
     rows.push({
       id: it.event_id,
-      tag: instanceTag(it.tags),
+      tag,
       title: it.title,
       name: personName(it.title, detail),
       next,
@@ -42,8 +46,9 @@ export function buildPeople(items, details, now = DateTime.now()) {
       daysAway: Math.round(next.diff(now.toUTC().startOf('day'), 'days').days),
       born: known ? detail.start_date : null,
       turns: known ? next.year - birthYear : null,
-      involvement: involvement === 'celebrate' || involvement === 'remember' ? involvement : null,
-      own: hasTag(it, 'personal') && !ehn && !instanceTag(it.tags),
+      involvement,
+      inferred: Boolean(involvement) && involvement !== slot, // worked out from the chain, not recorded on the instance
+      own: hasTag(it, 'personal') && !ehn && !tag,
       loaded: Boolean(detail),
     })
   }

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DateTime } from 'luxon'
 import * as api from './api'
-import { fmtDay, fmtShortDay, spellIso } from './time'
+import { fmtDay, fmtShortDay, spellIso, horizon, instanceTag } from './time'
 import { SpaceBar } from './SpaceBar'
 import { buildPeople, byMonth, awayText, tally } from './people'
 
@@ -15,6 +15,7 @@ const utcIso = (dt) => dt.toUTC().toISO()
 /** Birthday occurrences for the year ahead, then each series' authored event as the details arrive. */
 function useBirthdays() {
   const [items, setItems] = useState(null)
+  const [withTasks, setWithTasks] = useState(() => new Set()) // instance tags with chain tasks on the map
   const [details, setDetails] = useState(() => new Map())
   const [error, setError] = useState(null)
   const [generation, setGeneration] = useState(0)
@@ -23,8 +24,12 @@ function useBirthdays() {
   useEffect(() => {
     let on = true
     const start = DateTime.utc().startOf('day')
-    api.fetchAll({ tags: 'birthday', kind: 'event', from: utcIso(start), to: utcIso(start.plus({ years: 1 })), limit: 100 })
-      .then((list) => { if (on) { setItems(list); setError(null) } })
+    const h = horizon()
+    Promise.all([
+      api.fetchAll({ tags: 'birthday', kind: 'event', from: utcIso(start), to: utcIso(start.plus({ years: 1 })), limit: 100 }),
+      api.fetchAll({ tags: 'ehn:birthday', kind: 'task', from: utcIso(h.from), to: utcIso(h.to), limit: 100 }),
+    ])
+      .then(([list, tasks]) => { if (on) { setWithTasks(new Set(tasks.map((t) => instanceTag(t.tags)).filter(Boolean))); setItems(list); setError(null) } })
       .catch((e) => on && setError(e.message))
     return () => { on = false }
   }, [generation])
@@ -41,7 +46,7 @@ function useBirthdays() {
   }, [items])
 
   const reload = useCallback(() => setGeneration((g) => g + 1), [])
-  return { items, details, error, reload }
+  return { items, withTasks, details, error, reload }
 }
 
 const INVOLVEMENT_TEXT = {
@@ -50,7 +55,7 @@ const INVOLVEMENT_TEXT = {
 }
 
 export default function Birthdays() {
-  const { items, details, error, reload } = useBirthdays()
+  const { items, withTasks, details, error, reload } = useBirthdays()
   const [filter, setFilter] = useState('all') // all | celebrate | remember
 
   // Added by Siri or on another device: refresh when the page comes back into view.
@@ -61,7 +66,7 @@ export default function Birthdays() {
     return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) }
   }, [reload])
 
-  const rows = useMemo(() => (items ? buildPeople(items, details) : []), [items, details])
+  const rows = useMemo(() => (items ? buildPeople(items, details, DateTime.now(), withTasks) : []), [items, details, withTasks])
   const counts = useMemo(() => tally(rows), [rows])
   const shown = filter === 'all' ? rows : rows.filter((r) => r.involvement === filter)
   const groups = byMonth(shown)
@@ -112,6 +117,7 @@ export default function Birthdays() {
       </div>
 
       {items && counts.total > 0 && shown.length === 0 && <p className="eh-muted">nobody in this group</p>}
+      {rows.some((r) => r.inferred) && <p className="eh-muted">* worked out from the chain: added before the birthday question asked how involved you are</p>}
       {groups.map((g) => (
         <section key={g.key} className="eh-bday-month">
           <h3 className="eh-h">{g.label}</h3>
@@ -134,7 +140,7 @@ function Person({ row: r }) {
         {r.own
           ? <span className="eh-badge own">you</span>
           : r.involvement
-            ? <span className={`eh-badge ${r.involvement}`} title={INVOLVEMENT_TEXT[r.involvement]}>{r.involvement}</span>
+            ? <span className={`eh-badge ${r.involvement}`} title={`${INVOLVEMENT_TEXT[r.involvement]}${r.inferred ? ' (worked out from the chain; the instance predates the question)' : ''}`}>{r.involvement}{r.inferred ? '*' : ''}</span>
             : r.loaded && <span className="eh-badge plain">on the calendar</span>}
       </div>
       <div className="eh-bday-when">
