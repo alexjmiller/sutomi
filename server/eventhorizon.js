@@ -20,7 +20,7 @@ const SUBSTRATE_ALLOW = [
   ['GET', /^\/events(\?.*)?$/],
   ['POST', /^\/events$/], // sutomi-mcp's add_calendar_task (a plain task on a date)
   ['GET', /^\/events\/[^/?]+(\?.*)?$/],
-  ['PATCH', /^\/events\/[^/?]+$/],
+  ['PATCH', /^\/events\/[^/?]+(\?.*)?$/], // ?scope=single&occurrence_at= completes one occurrence of a recurring task
   ['POST', /^\/events\/[^/?]+\/reminders$/], // its 09:00 reminder
   ['DELETE', /^\/events\/[^/?]+(\?.*)?$/],
   ['GET', /^\/metrics$/],

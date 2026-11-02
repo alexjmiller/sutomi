@@ -53,7 +53,12 @@ export const addStep = (tag, step) => post(`/interview/instances/${encodeURIComp
 // Substrate (materialized occurrences)
 export const getOccurrences = (params) => request(`/substrate/events?${new URLSearchParams(params)}`)
 export const getEvent = (id) => request(`/substrate/events/${id}`)
-export const setCompleted = (id, completedAt) => request(`/substrate/events/${id}`, { method: 'PATCH', body: JSON.stringify({ completed_at: completedAt }) })
+/** Complete or reopen. With `occurrenceAt` (a recurrence instant) only that occurrence of a recurring series changes:
+ *  the substrate upserts an override row for it (`scope=single`); without it the definition itself is patched. */
+export const setCompleted = (id, completedAt, occurrenceAt) => request(
+  `/substrate/events/${id}${occurrenceAt ? `?${new URLSearchParams({ scope: 'single', occurrence_at: occurrenceAt })}` : ''}`,
+  { method: 'PATCH', body: JSON.stringify({ completed_at: completedAt }) },
+)
 
 /** Follow next_cursor until the whole range is in hand. */
 export async function fetchAll(params) {

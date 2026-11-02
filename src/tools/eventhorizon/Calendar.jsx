@@ -47,8 +47,8 @@ function useOccurrences() {
   }, [])
 
   const itemsFor = useCallback((keys) => dedupe(keys.flatMap((k) => cache.current.get(k) || [])), [])
-  const patch = useCallback((eventId, fn) => {
-    for (const [k, arr] of cache.current) cache.current.set(k, arr.map((it) => (it.event_id === eventId ? fn(it) : it)))
+  const patch = useCallback((match, fn) => {
+    for (const [k, arr] of cache.current) cache.current.set(k, arr.map((it) => (match(it) ? fn(it) : it)))
     bump()
   }, [])
   const reset = useCallback(() => { stale.current = true; setGeneration((g) => g + 1) }, [])
@@ -159,14 +159,35 @@ export default function Calendar() {
 
   const selectedItem = selected ? all.find((it) => it.occurrence_id === selected) : null
 
+  // Ticking one occurrence of a recurring task ("pick up Izzy from dance", every Monday) must not complete
+  // every week of it: for a recurring definition the substrate is asked for `scope=single` at this occurrence's
+  // instant, which gives that one occurrence an override row of its own. A one-off, or an occurrence that already
+  // has its own row (`is_override`), is patched directly. Definitions are fetched once and kept for the page.
+  const defs = useRef(new Map())
+  async function definitionOf(eventId) {
+    if (!defs.current.has(eventId)) defs.current.set(eventId, api.getEvent(eventId).catch(() => null))
+    return defs.current.get(eventId)
+  }
   async function toggleDone(it) {
     const next = it.completed_at ? null : new Date().toISOString()
-    occ.patch(it.event_id, (x) => ({ ...x, completed_at: next }))
+    const sameOcc = (x) => x.occurrence_id === it.occurrence_id
+    const sameEvent = (x) => x.event_id === it.event_id
+    occ.patch(sameOcc, (x) => ({ ...x, completed_at: next }))
     try {
-      await api.setCompleted(it.event_id, next)
+      const def = it.is_override ? null : await definitionOf(it.event_id)
+      if (def?.rrule && !next && def.completed_at) {
+        // the whole definition was completed (the old behaviour): reopening clears it for every occurrence
+        await api.setCompleted(it.event_id, null)
+        defs.current.set(it.event_id, Promise.resolve({ ...def, completed_at: null }))
+        occ.patch(sameEvent, (x) => ({ ...x, completed_at: null }))
+      } else if (def?.rrule) {
+        await api.setCompleted(it.event_id, next, it.starts_at)
+      } else {
+        await api.setCompleted(it.event_id, next)
+      }
       setProblem(null)
     } catch (e) {
-      occ.patch(it.event_id, (x) => ({ ...x, completed_at: it.completed_at }))
+      occ.patch(sameOcc, (x) => ({ ...x, completed_at: it.completed_at }))
       setProblem(`couldn't save that: ${e.message}`)
     }
   }
@@ -431,7 +452,7 @@ function ItemDetail({ item, nodes, label, onClose, onToggle, onRemoved, onChange
 
   // Keep the timeline in step with optimistic completes.
   const toggle = async (it) => {
-    setAll((c) => c && c.map((x) => (x.event_id === it.event_id ? { ...x, completed_at: it.completed_at ? null : new Date().toISOString() } : x)))
+    setAll((c) => c && c.map((x) => (x.occurrence_id === it.occurrence_id ? { ...x, completed_at: it.completed_at ? null : new Date().toISOString() } : x)))
     await onToggle(it)
   }
 
