@@ -1133,3 +1133,120 @@ button.eh-cell {
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* Birthdays: one row per person over the coming year, grouped by month */
+/* A tab that is a link (to another camera) or a label (the current one) sits in line with the button tabs */
+.eh-views a.eh-tab,
+.eh-views span.eh-tab {
+  text-decoration: none;
+  color: #46413d;
+  font-size: 18px;
+}
+
+.eh-views a.eh-tab:hover,
+.eh-views span.eh-tab.active {
+  text-decoration: underline;
+}
+
+.eh-bday-tally {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+
+.eh-filters .eh-chips {
+  margin-bottom: 0;
+}
+
+.eh-chipbtn.active {
+  background: #46413d;
+  color: #faf5e4;
+}
+
+.eh-bday-month {
+  margin: 20px 0 28px;
+  max-width: 640px;
+}
+
+.eh-bday-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.eh-bday-list li {
+  margin-bottom: 14px;
+}
+
+.eh-bday {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+
+.eh-bday.soon {
+  border-left-color: #F9CF42;
+}
+
+.eh-bday.dup {
+  border-left-color: #d4532b;
+}
+
+.eh-bday-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.eh-bday-name {
+  font-size: 22px;
+  color: #46413d;
+  text-decoration: none;
+}
+
+.eh-bday-name:hover {
+  text-decoration: underline;
+}
+
+.eh-bday-age {
+  font-size: 18px;
+  opacity: 0.8;
+}
+
+.eh-badge {
+  font-size: 14px;
+  line-height: 1.2;
+  padding: 2px 8px;
+  border: 1.5px solid #46413d;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.eh-badge.celebrate {
+  background: #F9CF42;
+  border-color: #F9CF42;
+}
+
+.eh-badge.remember {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+.eh-badge.own {
+  background: #46413d;
+  color: #faf5e4;
+}
+
+.eh-badge.plain {
+  border-color: transparent;
+  opacity: 0.6;
+  padding-left: 0;
+}
+
+.eh-bday-when {
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.eh-bday-soon {
+  color: #d4532b;
+}

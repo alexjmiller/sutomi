@@ -189,6 +189,7 @@ export default function Calendar() {
         <div className="eh-views" role="tablist">
           <button type="button" role="tab" aria-selected={view === 'month'} className={`eh-tab${view === 'month' ? ' active' : ''}`} onClick={() => setParam({ view: 'month' })}>month</button>
           <button type="button" role="tab" aria-selected={view === 'agenda'} className={`eh-tab${view === 'agenda' ? ' active' : ''}`} onClick={() => setParam({ view: 'agenda' })}>list</button>
+          <Link to="/tools/eventhorizon/birthdays" className="eh-tab">birthdays</Link>
         </div>
       </div>
 

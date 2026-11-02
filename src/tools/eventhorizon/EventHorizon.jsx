@@ -6,6 +6,7 @@ import * as api from './api'
 import { CATEGORIES } from './time'
 import Interview, { savedSessions, deferredLabel } from './Interview'
 import Calendar from './Calendar'
+import Birthdays from './Birthdays'
 import { SpaceBar, SPACE_LABEL } from './SpaceBar'
 import './eventhorizon.css'
 
@@ -18,6 +19,7 @@ export default function EventHorizon() {
       <Route path="interview/script/:id" element={<InterviewRoute kind="script" />} />
       <Route path="interview/node/:id" element={<InterviewRoute kind="node" />} />
       <Route path="calendar" element={<Calendar />} />
+      <Route path="birthdays" element={<Birthdays />} />
     </Routes>
   )
 }
@@ -125,6 +127,10 @@ function Home() {
           <span className="eh-entry-desc">
             the calendar{live != null ? ` · ${live} ${live === 1 ? 'event' : 'events'} with chains in play` : ''}
           </span>
+        </li>
+        <li>
+          <Link to="/tools/eventhorizon/birthdays" className="eh-entry-title">birthdays</Link>
+          <span className="eh-entry-desc">everyone's birthday over the coming year — who you're celebrating, who you're just remembering</span>
         </li>
       </ul>
     </main>
